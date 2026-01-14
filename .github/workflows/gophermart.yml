@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     container: golang:1.24
 
-    service:
+    services:
       postgres:
         image: postgres
         env:
