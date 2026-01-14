@@ -1,0 +1,316 @@
+openapi: 3.0.3
+info:
+  title: Gophermart Loyalty System API
+  description: |
+    Накопительная система лояльности «Гофермарт».
+    API для регистрации, аутентификации, загрузки заказов, начисления и списания баллов.
+  version: 1.0.0
+  contact:
+    name: GigaCode
+    email: support@gophermart.com
+
+servers:
+  - url: http://localhost:8080
+    description: Local server
+
+components:
+  schemas:
+    UserRegisterRequest:
+      type: object
+      required:
+        - login
+        - password
+      properties:
+        login:
+          type: string
+          example: "john_doe"
+        password:
+          type: string
+          format: password
+          example: "secret123"
+      additionalProperties: false
+
+    UserLoginRequest:
+      type: object
+      required:
+        - login
+        - password
+      properties:
+        login:
+          type: string
+          example: "john_doe"
+        password:
+          type: string
+          format: password
+          example: "secret123"
+      additionalProperties: false
+
+    OrderNumber:
+      type: string
+      pattern: '^\d+$'
+      example: "12345678903"
+
+    OrderResponse:
+      type: object
+      properties:
+        number:
+          type: string
+          example: "9278923470"
+        status:
+          type: string
+          enum: [NEW, PROCESSING, INVALID, PROCESSED]
+          example: "PROCESSED"
+        accrual:
+          type: number
+          format: float
+          nullable: true
+          example: 500
+        uploaded_at:
+          type: string
+          format: date-time
+          example: "2020-12-10T15:15:45+03:00"
+
+    BalanceResponse:
+      type: object
+      properties:
+        current:
+          type: number
+          format: float
+          example: 500.5
+        withdrawn:
+          type: number
+          format: float
+          example: 42
+
+    WithdrawRequest:
+      type: object
+      required:
+        - order
+        - sum
+      properties:
+        order:
+          type: string
+          pattern: '^\d+$'
+          example: "2377225624"
+        sum:
+          type: number
+          format: float
+          minimum: 0.01
+          example: 751
+
+    WithdrawalResponse:
+      type: object
+      properties:
+        order:
+          type: string
+          example: "2377225624"
+        sum:
+          type: number
+          format: float
+          example: 500
+        processed_at:
+          type: string
+          format: date-time
+          example: "2020-12-09T16:09:57+03:00"
+
+    AccrualCheckResponse:
+      type: object
+      properties:
+        order:
+          type: string
+          example: "12345678903"
+        status:
+          type: string
+          enum: [REGISTERED, PROCESSING, INVALID, PROCESSED]
+          example: "PROCESSED"
+        accrual:
+          type: number
+          format: float
+          nullable: true
+          example: 500
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    OrderNumberPath:
+      in: path
+      name: number
+      required: true
+      schema:
+        type: string
+        pattern: '^\d+$'
+      example: "12345678903"
+      description: Номер заказа (последовательность цифр)
+
+security:
+  - BearerAuth: []
+
+paths:
+  /api/user/register:
+    post:
+      summary: Регистрация пользователя
+      description: Регистрация по логину и паролю. После успешной регистрации происходит автоматическая аутентификация.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRegisterRequest'
+      responses:
+        '200':
+          description: Пользователь успешно зарегистрирован и аутентифицирован
+          headers:
+            Authorization:
+              schema:
+                type: string
+              description: Bearer-токен для аутентификации
+        '400':
+          description: Неверный формат запроса
+        '409':
+          description: Логин уже занят
+        '500':
+          description: Внутренняя ошибка сервера
+
+  /api/user/login:
+    post:
+      summary: Аутентификация пользователя
+      description: Аутентификация по логину и паролю.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserLoginRequest'
+      responses:
+        '200':
+          description: Пользователь успешно аутентифицирован
+          headers:
+            Authorization:
+              schema:
+                type: string
+              description: Bearer-токен для аутентификации
+        '400':
+          description: Неверный формат запроса
+        '401':
+          description: Неверная пара логин/пароль
+        '500':
+          description: Внутренняя ошибка сервера
+
+  /api/user/orders:
+    post:
+      summary: Загрузка номера заказа
+      description: |
+        Доступно только аутентифицированным пользователям.
+        Номер заказа проверяется по алгоритму Луна.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          text/plain:
+            schema:
+              $ref: '#/components/schemas/OrderNumber'
+      responses:
+        '200':
+          description: Номер заказа уже был загружен этим пользователем
+        '202':
+          description: Новый номер заказа принят в обработку
+        '400':
+          description: Неверный формат запроса
+        '401':
+          description: Пользователь не аутентифицирован
+        '409':
+          description: Номер заказа уже был загружен другим пользователем
+        '422':
+          description: Неверный формат номера заказа (не прошёл проверку Луна или не цифры)
+        '500':
+          description: Внутренняя ошибка сервера
+
+    get:
+      summary: Получение списка загруженных заказов
+      description: Список заказов пользователя, отсортированный по дате загрузки (новые — первые)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Успешная обработка запроса
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrderResponse'
+        '204':
+          description: Нет данных для ответа (нет заказов)
+        '401':
+          description: Пользователь не авторизован
+        '500':
+          description: Внутренняя ошибка сервера
+
+  /api/user/balance:
+    get:
+      summary: Получение текущего баланса пользователя
+      description: Возвращает текущий баланс и общую сумму списанных баллов
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Успешная обработка запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalanceResponse'
+        '401':
+          description: Пользователь не авторизован
+        '500':
+          description: Внутренняя ошибка сервера
+
+  /api/user/balance/withdraw:
+    post:
+      summary: Запрос на списание баллов
+      description: Списание баллов в счёт оплаты нового заказа
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WithdrawRequest'
+      responses:
+        '200':
+          description: Успешная обработка запроса
+        '401':
+          description: Пользователь не авторизован
+        '402':
+          description: На счету недостаточно средств
+        '422':
+          description: Неверный номер заказа (не цифры)
+        '500':
+          description: Внутренняя ошибка сервера
+
+  /api/user/withdrawals:
+    get:
+      summary: Получение информации о списаниях
+      description: Возвращает историю списаний, отсортированную по дате (новые — первые)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Успешная обработка запроса
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WithdrawalResponse'
+        '204':
+          description: Нет ни одного списания
+        '401':
+          description: Пользователь не авторизован
+        '500':
+          description: Внутренняя ошибка сервера

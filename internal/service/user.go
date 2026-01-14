@@ -1,0 +1,96 @@
+// internal/service/user.go
+package service
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"golang.org/x/crypto/bcrypt"
+
+	"github.com/golang-jwt/jwt"
+	"github.com/mrPTqp/gofermart/internal/repository"
+)
+
+const tokenTTL = 24 * time.Hour
+const jwtSecretKey = "supersecretkey"
+
+type UserService interface {
+    Register(ctx context.Context, login, password string) (int64, string, error)
+    Login(ctx context.Context, login, password string) (int64, string, error)
+}
+
+type UserClaims struct {
+	UserID int64 `json:"user_id"`
+	jwt.StandardClaims
+}
+
+type UserServiceImpl struct {
+	repo repository.UserRepository
+}
+
+func NewUserServiceImpl(repo repository.UserRepository) *UserServiceImpl {
+	return &UserServiceImpl{repo: repo}
+}
+
+func (s *UserServiceImpl) Register(ctx context.Context, login, password string) (int64, string, error) {
+	_, err := s.repo.FindByLogin(ctx, login)
+	if err == nil {
+		return 0, "", repository.ErrLoginExists
+	}
+	if !errors.Is(err, repository.ErrNotFound) {
+		return 0, "", fmt.Errorf("failed to check user existence: %w", err)
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return 0, "", fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	if err := s.repo.Create(ctx, login, string(hashedPassword)); err != nil {
+		return 0, "", fmt.Errorf("failed to create user: %w", err)
+	}
+
+	user, err := s.repo.FindByLogin(ctx, login)
+	if err != nil {
+		return 0, "", fmt.Errorf("failed to fetch created user: %w", err)
+	}
+
+	token, err := s.generateJWT(user.ID)
+	if err != nil {
+		return 0, "", fmt.Errorf("failed to generate token: %w", err)
+	}
+
+	return user.ID, token, nil
+}
+
+func (s *UserServiceImpl) Login(ctx context.Context, login, password string) (int64, string, error) {
+	user, err := s.repo.FindByLogin(ctx, login)
+	if err != nil {
+		return 0, "", errors.New("invalid credentials")
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+		return 0, "", errors.New("invalid credentials")
+	}
+
+	token, err := s.generateJWT(user.ID)
+	if err != nil {
+		return 0, "", fmt.Errorf("failed to generate token: %w", err)
+	}
+
+	return user.ID, token, nil
+}
+
+func (s *UserServiceImpl) generateJWT(userID int64) (string, error) {
+	claims := &UserClaims{
+		UserID: userID,
+		StandardClaims: jwt.StandardClaims{
+			ExpiresAt: time.Now().Add(tokenTTL).Unix(),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(jwtSecretKey))
+}
