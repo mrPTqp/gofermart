@@ -143,7 +143,7 @@ func (h *GofermartHandler) UploadOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !luhn.IsValid(orderNum) {
-		http.Error(w, "invalid order number (Luhn)", http.StatusBadRequest)
+		http.Error(w, "invalid order number (Luhn)", http.StatusUnprocessableEntity)
 		return
 	}
 
@@ -227,7 +227,7 @@ func (h *GofermartHandler) WithdrawBalance(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if !luhn.IsValid(input.Order) {
-		http.Error(w, "invalid order number (Luhn)", http.StatusBadRequest)
+		http.Error(w, "invalid order number (Luhn)", http.StatusUnprocessableEntity)
 		return
 	}
 
