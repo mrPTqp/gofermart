@@ -24,8 +24,8 @@ func StartGofermartServer(
 	r := chi.NewRouter()
 
 	// Общие middleware
-	r.Use(mw.LoggingMiddleware)
-	r.Use(mw.GzipMiddleware)
+	r.Use(mw.LoggingMiddleware(logger))
+	r.Use(mw.GzipMiddleware(logger))
 	r.Use(middleware.Recoverer) // chi built-in panic recovery
 
 	// Публичные маршруты (без авторизации)
@@ -34,7 +34,7 @@ func StartGofermartServer(
 
 	// Защищённые маршруты (требуют авторизации)
 	r.Group(func(r chi.Router) {
-		r.Use(mw.AuthMiddleware)
+		r.Use(mw.AuthMiddleware(logger))
 
 		r.Post("/api/user/orders", gh.UploadOrder)
 		r.Get("/api/user/orders", gh.GetOrders)
