@@ -23,6 +23,7 @@ import (
 func main() {
 	logger := logger.NewSugarLogger()
 
+	logger.Info("try to create config")
 	cfg := config.LoadConfig()
 	logger.Infow("configuration created", "config", cfg)
 
@@ -72,7 +73,7 @@ func main() {
 
 	h := handler.NewGofermartHandler(us, ors, as, cfg, logger)
 
-	accrualService, err := service.NewAccrualService( //gorutine? //вынести в app?
+	accrualService, err := service.NewAccrualService(
         cfg.AccrualAddress.String(),
         or,
 		as,
