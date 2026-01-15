@@ -12,6 +12,11 @@ type NetAddress struct {
 }
 
 func (na *NetAddress) SetAddress(address string) error {
+	if strings.HasPrefix(address, "http://") {
+		address = strings.TrimPrefix(address, "http://")
+	} else if strings.HasPrefix(address, "https://") {
+		address = strings.TrimPrefix(address, "https://")
+	}
 	parts := strings.Split(address, ":")
 	if len(parts) != 2 {
 		return errors.New("wrong address format, expected host:port")
