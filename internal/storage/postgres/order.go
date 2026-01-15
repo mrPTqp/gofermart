@@ -158,17 +158,22 @@ func (s *OrderStorage) UpdateStatus(ctx context.Context, number, status string) 
 }
 
 func (s *OrderStorage) GetOrdersForProcessing(ctx context.Context) ([]model.Order, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.db.QueryContext(ctx,		
 		`SELECT 
-			number, 
-			user_id, 
-			created_at, 
-			updated_at, 
-			status_code, 
-			last_checked_at
-		FROM public.t_order 
-		WHERE status_code IN ('NEW', 'PROCESSING')
-		ORDER BY created_at ASC`,
+          o.number,
+          o.user_id,
+          o.created_at,
+          o.updated_at,
+          o.status_code,
+          o.last_checked_at
+        FROM 
+          public.t_order o
+        JOIN 
+          public.d_order_status s 
+        ON o.status_code = s.code
+        WHERE 
+          o.status_code in ('NEW', 'PROCESSING')
+		  ORDER BY created_at ASC`,
 	)
 	if err != nil {
 		return nil, err

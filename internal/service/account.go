@@ -10,10 +10,10 @@ import (
 )
 
 type AccountService interface {
-    GetBalance(ctx context.Context, userID int64) (model.Balance, error)
-    Withdraw(ctx context.Context, userID int64, order string, sum float64) error
-    GetWithdrawals(ctx context.Context, userID int64) ([]model.Withdrawal, error)
-    IncreaseBalance(ctx context.Context, userID int64, amount float64) error
+	GetBalance(ctx context.Context, userID int64) (model.Balance, error)
+	Withdraw(ctx context.Context, userID int64, order string, sum float64) error
+	GetWithdrawals(ctx context.Context, userID int64) ([]model.Withdrawal, error)
+	IncreaseBalance(ctx context.Context, userID int64, amount float64) error
 }
 
 type AccountServiceImpl struct {
@@ -37,16 +37,19 @@ func (s *AccountServiceImpl) Withdraw(ctx context.Context, userID int64, order s
 		return errors.New("withdrawal amount must be positive")
 	}
 
+	// Округляем сумму до копеек
+	roundedSum := round(sum, 2)
+
 	balance, err := s.repo.GetCurrentBalance(ctx, userID)
 	if err != nil {
 		return err
 	}
 
-	if balance.Current < sum {
+	if balance.Current < roundedSum {
 		return repository.ErrInsufficientFunds
 	}
 
-	return s.repo.Withdraw(ctx, userID, order, sum)
+	return s.repo.Withdraw(ctx, userID, order, roundedSum)
 }
 
 func (s *AccountServiceImpl) GetWithdrawals(ctx context.Context, userID int64) ([]model.Withdrawal, error) {
@@ -61,5 +64,8 @@ func (s *AccountServiceImpl) IncreaseBalance(ctx context.Context, userID int64, 
 	if amount <= 0 {
 		return errors.New("amount must be positive")
 	}
-	return s.repo.IncreaseBalance(ctx, userID, amount)
+
+	// Округляем сумму до копеек
+	roundedAmount := round(amount, 2)
+	return s.repo.IncreaseBalance(ctx, userID, roundedAmount)
 }

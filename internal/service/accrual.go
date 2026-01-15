@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"time"
@@ -15,7 +16,7 @@ import (
 )
 
 type AccrualService interface {
-    ProcessOrders(ctx context.Context)
+	ProcessOrders(ctx context.Context)
 }
 
 type AccrualServiceImpl struct {
@@ -61,8 +62,10 @@ func (s *AccrualServiceImpl) ProcessOrders(ctx context.Context) {
 		s.logger.Errorf("failed to get orders for processing: %v", err)
 		return
 	}
+	s.logger.Infof("orders with status NEW or PROCESSING %s", orders)
 
 	for _, order := range orders {
+		s.logger.Infof("start processing order %s", order.Number)
 		if err := s.processOrder(ctx, order); err != nil {
 			s.logger.Errorf("failed to process order %s: %v", order.Number, err)
 		}
@@ -108,8 +111,15 @@ func (s *AccrualServiceImpl) processOrder(ctx context.Context, order model.Order
 		// Обновляем статус заказа
 		updatedOrder := order
 		updatedOrder.StatusCode = newStatus
-		updatedOrder.Accrual = accrualResp.Accrual
 		updatedOrder.UpdatedAt = time.Now()
+
+		// Округляем начисление при сохранении
+		if accrualResp.Accrual != nil {
+			roundedAccrual := round(*accrualResp.Accrual, 2)
+			updatedOrder.Accrual = &roundedAccrual
+		} else {
+			updatedOrder.Accrual = nil
+		}
 
 		if err := s.orderRepository.Update(ctx, &updatedOrder); err != nil {
 			return fmt.Errorf("failed to update order: %v", err)
@@ -141,4 +151,9 @@ func (s *AccrualServiceImpl) processOrder(ctx context.Context, order model.Order
 	}
 
 	return nil
+}
+
+func round(val float64, precision int) float64 {
+	shift := math.Pow(10, float64(precision))
+	return math.Round(val*shift) / shift
 }
