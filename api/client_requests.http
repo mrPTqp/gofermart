@@ -52,3 +52,32 @@ Authorization: {{authToken}}
 ### 7. Получение истории списаний
 GET http://localhost:8080/api/user/withdrawals
 Authorization: {{authToken}}
+
+
+
+
+
+
+### 1. Эмуляция запроса к сервису начислений
+POST http://localhost:8081/api/orders HTTP/1.1
+Content-Type: application/json
+
+{
+    "order": "9278923470",
+    "goods": [
+        {
+            "description": "Чайник Bork",
+            "price": 7000
+        }
+    ]
+} 
+
+### 2. Регистрация информации о вознаграждении за товар
+POST http://localhost:8081/api/goods HTTP/1.1
+Content-Type: application/json
+
+{
+    "match": "Bork",
+    "reward": 10,
+    "reward_type": "%"
+}

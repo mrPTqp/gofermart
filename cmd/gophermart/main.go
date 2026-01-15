@@ -74,7 +74,7 @@ func main() {
 	h := handler.NewGofermartHandler(us, ors, as, cfg, logger)
 
 	accrualService, err := service.NewAccrualService(
-        cfg.AccrualAddress.String(),
+        "http://" + cfg.AccrualAddress.String(),
         or,
 		as,
         logger,
@@ -84,7 +84,7 @@ func main() {
     }
 
     go func() {
-        ticker := time.NewTicker(10 * time.Minute) 
+        ticker := time.NewTicker(10 * time.Second) 
         defer ticker.Stop()
 
         for {

@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"math"
 	"time"
 
 	"github.com/mrPTqp/gofermart/internal/model"
@@ -46,15 +47,16 @@ func (s *OrderStorage) Create(ctx context.Context, number string, userID int64) 
 func (s *OrderStorage) GetByUser(ctx context.Context, userID int64) ([]model.Order, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT 
-			o.number, 
-			o.created_at, 
-			o.updated_at, 
-			o.status_code, 
+			o.number,
+			o.created_at,
+			o.updated_at,
+			o.status_code,
 			o.last_checked_at,
-			(a.difference::FLOAT8 / 100.0) AS accrual
+			(sum(a.difference) FILTER (WHERE a.difference > 0) / 100.0) AS accrual
 		FROM public.t_order o
-		LEFT JOIN public.t_account a ON a.order_number = o.number AND a.difference > 0
+		LEFT JOIN public.t_account a ON a.order_number = o.number
 		WHERE o.user_id = $1
+		GROUP BY o.number, o.created_at, o.updated_at, o.status_code, o.last_checked_at
 		ORDER BY o.created_at DESC`,
 		userID)
 	if err != nil {
@@ -66,7 +68,7 @@ func (s *OrderStorage) GetByUser(ctx context.Context, userID int64) ([]model.Ord
 	for rows.Next() {
 		var o model.Order
 		var lastChecked sql.NullTime
-		var accrual *float64
+		var accrual sql.NullFloat64
 
 		err = rows.Scan(
 			&o.Number,
@@ -82,11 +84,15 @@ func (s *OrderStorage) GetByUser(ctx context.Context, userID int64) ([]model.Ord
 
 		if lastChecked.Valid {
 			o.LastCheckedAt = lastChecked.Time
-		} else {
-			o.LastCheckedAt = time.Time{}
 		}
 
-		o.Accrual = accrual
+		o.UploadedAt = o.CreatedAt
+
+		if accrual.Valid {
+			value := round(accrual.Float64, 2)
+			o.Accrual = &value
+		}
+
 		orders = append(orders, o)
 	}
 
@@ -96,6 +102,13 @@ func (s *OrderStorage) GetByUser(ctx context.Context, userID int64) ([]model.Ord
 
 	return orders, nil
 }
+
+
+func round(val float64, precision int) float64 {
+	shift := math.Pow(10, float64(precision))
+	return math.Round(val*shift) / shift
+}
+
 
 func (s *OrderStorage) GetByNumber(ctx context.Context, number string) (*model.Order, error) {
 	var order model.Order
@@ -147,14 +160,12 @@ func (s *OrderStorage) UpdateStatus(ctx context.Context, number, status string) 
 func (s *OrderStorage) GetOrdersForProcessing(ctx context.Context) ([]model.Order, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT 
-			id,
 			number, 
 			user_id, 
 			created_at, 
 			updated_at, 
 			status_code, 
-			last_checked_at,
-			accrual
+			last_checked_at
 		FROM public.t_order 
 		WHERE status_code IN ('NEW', 'PROCESSING')
 		ORDER BY created_at ASC`,
@@ -168,17 +179,14 @@ func (s *OrderStorage) GetOrdersForProcessing(ctx context.Context) ([]model.Orde
 	for rows.Next() {
 		var order model.Order
 		var lastChecked sql.NullTime
-		var accrual *float64
 
 		err = rows.Scan(
-			&order.ID,
 			&order.Number,
 			&order.UserID,
 			&order.CreatedAt,
 			&order.UpdatedAt,
 			&order.StatusCode,
 			&lastChecked,
-			&accrual,
 		)
 		if err != nil {
 			return nil, err
@@ -186,30 +194,22 @@ func (s *OrderStorage) GetOrdersForProcessing(ctx context.Context) ([]model.Orde
 
 		if lastChecked.Valid {
 			order.LastCheckedAt = lastChecked.Time
-		} else {
-			order.LastCheckedAt = time.Time{}
 		}
-		order.Accrual = accrual
+
 		orders = append(orders, order)
 	}
 
-	if err = rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return orders, nil
+	return orders, rows.Err()
 }
 
 func (s *OrderStorage) Update(ctx context.Context, order *model.Order) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE public.t_order
 		SET status_code = $1, 
-			accrual = $2, 
 			last_checked_at = NOW(), 
 			updated_at = NOW()
-		WHERE number = $3`,
+		WHERE number = $2`,
 		string(order.StatusCode),
-		order.Accrual,
 		order.Number,
 	)
 	return err

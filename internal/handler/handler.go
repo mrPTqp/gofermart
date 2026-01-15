@@ -34,7 +34,7 @@ type UserClaims struct {
 type GofermartHandler struct {
 	UserService    service.UserService
 	OrderService   service.OrderService
-	BalanceService service.AccountService
+	AccountService service.AccountService
 	Config         *config.Config
 	Logger         *zap.SugaredLogger
 }
@@ -42,14 +42,14 @@ type GofermartHandler struct {
 func NewGofermartHandler(
 	userService service.UserService,
 	orderService service.OrderService,
-	balanceService service.AccountService,
+	accountService service.AccountService,
 	config *config.Config,
 	logger *zap.SugaredLogger,
 ) *GofermartHandler {
 	return &GofermartHandler{
 		UserService:    userService,
 		OrderService:   orderService,
-		BalanceService: balanceService,
+		AccountService: accountService,
 		Config:         config,
 		Logger:         logger,
 	}
@@ -196,7 +196,7 @@ func (h *GofermartHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	balance, err := h.BalanceService.GetBalance(r.Context(), userID)
+	balance, err := h.AccountService.GetBalance(r.Context(), userID)
 	if err != nil {
 		h.Logger.Errorf("get balance error: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -231,7 +231,7 @@ func (h *GofermartHandler) WithdrawBalance(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	err = h.BalanceService.Withdraw(r.Context(), userID, input.Order, input.Sum)
+	err = h.AccountService.Withdraw(r.Context(), userID, input.Order, input.Sum)
 	if err != nil {
 		if err.Error() == "insufficient funds" {
 			http.Error(w, "insufficient funds", http.StatusPaymentRequired)
@@ -252,7 +252,7 @@ func (h *GofermartHandler) GetWithdrawals(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	withdrawals, err := h.BalanceService.GetWithdrawals(r.Context(), userID)
+	withdrawals, err := h.AccountService.GetWithdrawals(r.Context(), userID)
 	if err != nil {
 		h.Logger.Errorf("get withdrawals error: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
