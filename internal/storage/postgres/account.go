@@ -25,7 +25,7 @@ func (s *AccountStorage) GetCurrentBalance(ctx context.Context, userID int64) (*
 
 	err := s.db.QueryRowContext(ctx,
 		`SELECT 
-			(SUM(CASE WHEN difference > 0 THEN difference ELSE 0 END)::FLOAT8 / 100.0),
+			SUM(difference)::FLOAT8 / 100.0,
 			(SUM(CASE WHEN difference < 0 THEN -difference ELSE 0 END)::FLOAT8 / 100.0)
 		FROM public.t_account
 		WHERE user_id = $1`,
@@ -47,6 +47,7 @@ func (s *AccountStorage) GetCurrentBalance(ctx context.Context, userID int64) (*
 
 	return balance, nil
 }
+
 
 func (s *AccountStorage) AddAccrual(ctx context.Context, orderNumber string, userID int64, accrual float64) error {
 	cents := int64(accrual * 100)
