@@ -52,7 +52,10 @@ func (s *OrderStorage) GetByUser(ctx context.Context, userID int64) ([]model.Ord
 			o.updated_at,
 			o.status_code,
 			o.last_checked_at,
-			(sum(a.difference) FILTER (WHERE a.difference > 0) / 100.0) AS accrual
+			CASE 
+				WHEN o.status_code = 'PROCESSED' THEN (sum(a.difference) FILTER (WHERE a.difference > 0) / 100.0)
+				ELSE NULL
+			END AS accrual
 		FROM public.t_order o
 		LEFT JOIN public.t_account a ON a.order_number = o.number
 		WHERE o.user_id = $1
@@ -91,6 +94,8 @@ func (s *OrderStorage) GetByUser(ctx context.Context, userID int64) ([]model.Ord
 		if accrual.Valid {
 			value := round(accrual.Float64, 2)
 			o.Accrual = &value
+		} else {
+			o.Accrual = nil // явно устанавливаем nil, если статус не PROCESSED или нет начислений
 		}
 
 		orders = append(orders, o)

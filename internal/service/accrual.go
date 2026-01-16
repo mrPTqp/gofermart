@@ -23,7 +23,7 @@ type AccrualServiceImpl struct {
 	client           *http.Client
 	accrualSystemURL *url.URL
 	orderRepository  repository.OrderRepository
-	balanceService   AccountService
+	accountService   AccountService
 	logger           *zap.SugaredLogger
 }
 
@@ -48,7 +48,7 @@ func NewAccrualService(
 		client:           &http.Client{Timeout: 10 * time.Second},
 		accrualSystemURL: accrualURL,
 		orderRepository:  orderRepository,
-		balanceService:   balanceService,
+		accountService:   balanceService,
 		logger:           logger,
 	}, nil
 }
@@ -91,6 +91,7 @@ func (s *AccrualServiceImpl) processOrder(ctx context.Context, order model.Order
 		if err := json.NewDecoder(resp.Body).Decode(&accrualResp); err != nil {
 			return fmt.Errorf("failed to decode accrual response: %v", err)
 		}
+		s.logger.Infof("response from accrualService %s", accrualResp)
 
 		// Преобразуем статус из системы начислений в наш статус
 		var newStatus model.OrderStatus
@@ -116,7 +117,9 @@ func (s *AccrualServiceImpl) processOrder(ctx context.Context, order model.Order
 		// Округляем начисление при сохранении
 		if accrualResp.Accrual != nil {
 			roundedAccrual := round(*accrualResp.Accrual, 2)
+			s.logger.Infof("rounded accrual %f", roundedAccrual)
 			updatedOrder.Accrual = &roundedAccrual
+			s.logger.Infof("updated accrual %f", *updatedOrder.Accrual)
 		} else {
 			updatedOrder.Accrual = nil
 		}
@@ -125,11 +128,10 @@ func (s *AccrualServiceImpl) processOrder(ctx context.Context, order model.Order
 			return fmt.Errorf("failed to update order: %v", err)
 		}
 
-		// Если заказ обработан и есть начисление, обновляем баланс пользователя
 		if updatedOrder.StatusCode == model.OrderStatusProcessed && updatedOrder.Accrual != nil {
-			if err := s.balanceService.IncreaseBalance(ctx, order.UserID, *updatedOrder.Accrual); err != nil {
+			// Передаём номер заказа в IncreaseBalance
+			if err := s.accountService.IncreaseBalance(ctx, order.UserID, order.Number, *updatedOrder.Accrual); err != nil {
 				s.logger.Errorf("failed to update user balance: %v", err)
-				// Не возвращаем ошибку, так как обновление баланса не критично для статуса заказа
 			}
 		}
 

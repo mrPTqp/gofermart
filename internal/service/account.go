@@ -13,7 +13,7 @@ type AccountService interface {
 	GetBalance(ctx context.Context, userID int64) (model.Balance, error)
 	Withdraw(ctx context.Context, userID int64, order string, sum float64) error
 	GetWithdrawals(ctx context.Context, userID int64) ([]model.Withdrawal, error)
-	IncreaseBalance(ctx context.Context, userID int64, amount float64) error
+	IncreaseBalance(ctx context.Context, userID int64, orderNumber string, amount float64) error
 }
 
 type AccountServiceImpl struct {
@@ -60,12 +60,10 @@ func (s *AccountServiceImpl) GetWithdrawals(ctx context.Context, userID int64) (
 	return withdrawals, nil
 }
 
-func (s *AccountServiceImpl) IncreaseBalance(ctx context.Context, userID int64, amount float64) error {
+func (s *AccountServiceImpl) IncreaseBalance(ctx context.Context, userID int64, orderNumber string, amount float64) error {
 	if amount <= 0 {
 		return errors.New("amount must be positive")
 	}
-
-	// Округляем сумму до копеек
 	roundedAmount := round(amount, 2)
-	return s.repo.IncreaseBalance(ctx, userID, roundedAmount)
+	return s.repo.IncreaseBalance(ctx, userID, orderNumber, roundedAmount)
 }

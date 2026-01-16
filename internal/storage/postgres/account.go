@@ -113,11 +113,11 @@ func (s *AccountStorage) GetWithdrawals(ctx context.Context, userID int64) ([]mo
 	return withdrawals, nil
 }
 
-func (s *AccountStorage) IncreaseBalance(ctx context.Context, userID int64, amount float64) error {
+func (s *AccountStorage) IncreaseBalance(ctx context.Context, userID int64, orderNumber string, amount float64) error {
 	amountInCents := int64(amount * 100)
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO public.t_account (user_id, difference) 
-		 VALUES ($1, $2)`,
-		userID, amountInCents)
+		`INSERT INTO public.t_account (user_id, order_number, difference)
+		VALUES ($1, $2, $3)`,
+		userID, orderNumber, amountInCents)
 	return err
 }
