@@ -23,7 +23,6 @@ import (
 // inspect logging logic
 // add debug logs
 // add readme (how are you processing balance? document it)
-// add secret config (for auth)
 // tests
 // remove comments
 func main() {
@@ -70,7 +69,7 @@ func main() {
 		logger.Panic("init postgres account repository error", err)
 	}
 
-	us := service.NewUserService(ur)
+	us := service.NewUserService(ur, cfg.JWTSecret, cfg.JWTTTL)
 	ors := service.NewOrderService(or)
 	as := service.NewAccountService(ar)
 

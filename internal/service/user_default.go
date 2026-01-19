@@ -13,20 +13,23 @@ import (
 	"github.com/mrPTqp/gofermart/internal/repository"
 )
 
-const tokenTTL = 24 * time.Hour
-const jwtSecretKey = "supersecretkey"
-
 type UserClaims struct {
 	UserID int64 `json:"user_id"`
 	jwt.StandardClaims
 }
 
 type UserServiceDefault struct {
-	repo repository.UserRepository
+    repo       repository.UserRepository
+    jwtSecret  []byte
+    tokenTTL   time.Duration
 }
 
-func NewUserService(repo repository.UserRepository) *UserServiceDefault {
-	return &UserServiceDefault{repo: repo}
+func NewUserService(repo repository.UserRepository, jwtSecret string, ttl time.Duration) *UserServiceDefault {
+    return &UserServiceDefault{
+        repo:       repo,
+        jwtSecret:  []byte(jwtSecret),
+        tokenTTL:   ttl, 
+    }
 }
 
 func (s *UserServiceDefault) Register(ctx context.Context, login, password string) (int64, string, error) {
@@ -79,13 +82,13 @@ func (s *UserServiceDefault) Login(ctx context.Context, login, password string) 
 }
 
 func (s *UserServiceDefault) generateJWT(userID int64) (string, error) {
-	claims := &UserClaims{
-		UserID: userID,
-		StandardClaims: jwt.StandardClaims{
-			ExpiresAt: time.Now().Add(tokenTTL).Unix(),
-		},
-	}
+    claims := &UserClaims{
+        UserID: userID,
+        StandardClaims: jwt.StandardClaims{
+            ExpiresAt: time.Now().Add(s.tokenTTL).Unix(),
+        },
+    }
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(jwtSecretKey))
+    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+    return token.SignedString(s.jwtSecret)
 }

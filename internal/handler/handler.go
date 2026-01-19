@@ -63,7 +63,7 @@ func (h *GofermartHandler) getUID(r *http.Request) (int64, error) {
 	return uid, nil
 }
 
-func (h *GofermartHandler) decodeBody(r *http.Request, dst interface{}) error {
+func (h *GofermartHandler) decodeBody(r *http.Request, dst any) error {
 	defer r.Body.Close()
 	if r.Header.Get("Content-Type") != "application/json" {
 		return errors.New("content-type must be application/json")

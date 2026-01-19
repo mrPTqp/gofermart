@@ -34,7 +34,7 @@ func StartGofermartServer(
 
 	// Защищённые маршруты (требуют авторизации)
 	r.Group(func(r chi.Router) {
-		r.Use(mw.AuthMiddleware(logger))
+		r.Use(mw.AuthMiddleware(logger, cfg.JWTSecret))
 
 		r.Post("/api/user/orders", gh.UploadOrder)
 		r.Get("/api/user/orders", gh.GetOrders)

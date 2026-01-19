@@ -83,7 +83,7 @@ func LoggingMiddleware(logger *zap.SugaredLogger) func(http.Handler) http.Handle
 			duration := time.Since(start)
 
 			// Формируем аргументы для SugaredLogger (Infow требует пары: ключ-значение)
-			args := []interface{}{
+			args := []any{
 				"method", r.Method,
 				"uri", r.RequestURI,
 				"query", r.URL.RawQuery,

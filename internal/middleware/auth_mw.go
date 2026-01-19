@@ -12,10 +12,11 @@ import (
 	"go.uber.org/zap"
 )
 
-const jwtSecretKey = "supersecretkey" // Должно быть в env переменных
+// AuthMiddleware возвращает middleware с проверкой JWT
+// Принимает logger и jwtSecret извне
+func AuthMiddleware(logger *zap.SugaredLogger, jwtSecret string) func(http.Handler) http.Handler {
+	secret := []byte(jwtSecret)
 
-// AuthMiddleware возвращает middleware с логированием
-func AuthMiddleware(logger *zap.SugaredLogger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			logger.Debug("auth middleware: started")
@@ -27,26 +28,26 @@ func AuthMiddleware(logger *zap.SugaredLogger) func(http.Handler) http.Handler {
 				return
 			}
 
-			logger.Debugf("auth middleware: Authorization header = %s", authHeader)
-
-			parts := strings.Split(authHeader, " ")
-			if len(parts) != 2 || parts[0] != "Bearer" {
+			const bearerPrefix = "Bearer "
+			if !strings.HasPrefix(authHeader, bearerPrefix) {
 				logger.Debug("auth middleware: invalid authorization format")
 				http.Error(w, "invalid authorization format", http.StatusUnauthorized)
 				return
 			}
 
-			tokenString := parts[1]
+			tokenString := authHeader[len(bearerPrefix):]
 			logger.Debug("auth middleware: parsing JWT token")
 
 			claims := &handler.UserClaims{}
 
 			token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
 				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-					logger.Warnf("auth middleware: unexpected signing method: %v", token.Header["alg"])
 					return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 				}
-				return []byte(jwtSecretKey), nil
+				if token.Method.Alg() != "HS256" {
+					return nil, fmt.Errorf("unexpected signing algorithm: %s", token.Method.Alg())
+				}
+				return secret, nil
 			})
 
 			if err != nil {
@@ -61,10 +62,8 @@ func AuthMiddleware(logger *zap.SugaredLogger) func(http.Handler) http.Handler {
 				return
 			}
 
-			// Успешная аутентификация
 			logger.Infof("auth middleware: user authenticated successfully, userID=%d", claims.UserID)
 
-			// Передача userID в контекст
 			ctx := context.WithValue(r.Context(), handler.UserIDKeyContext, claims.UserID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
