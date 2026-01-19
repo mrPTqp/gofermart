@@ -15,10 +15,10 @@ import (
 
 type UserStorage struct {
 	db     *sql.DB
-	logger *zap.SugaredLogger
+	logger *zap.Logger
 }
 
-func NewUserStorage(db *sql.DB, logger *zap.SugaredLogger) (*UserStorage, error) {
+func NewUserStorage(db *sql.DB, logger *zap.Logger) (*UserStorage, error) {
 	return &UserStorage{db: db, logger: logger}, nil
 }
 

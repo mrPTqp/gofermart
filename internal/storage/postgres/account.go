@@ -13,11 +13,11 @@ import (
 
 type AccountStorage struct {
 	db     *sql.DB
-	logger *zap.SugaredLogger
+	logger *zap.Logger
 	mu     sync.Mutex
 }
 
-func NewAccountStorage(db *sql.DB, logger *zap.SugaredLogger) (*AccountStorage, error) {
+func NewAccountStorage(db *sql.DB, logger *zap.Logger) (*AccountStorage, error) {
 	return &AccountStorage{
 		db:     db,
 		logger: logger,

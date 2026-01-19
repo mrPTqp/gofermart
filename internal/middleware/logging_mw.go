@@ -2,12 +2,15 @@ package middleware
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"go.uber.org/zap"
+
+	"github.com/mrPTqp/gofermart/internal/contextkey"
 )
 
 type loggingResponseWriter struct {
@@ -15,6 +18,7 @@ type loggingResponseWriter struct {
 	bodyBuf *bytes.Buffer
 	status  int
 	size    int
+	err     error
 }
 
 func (lw *loggingResponseWriter) Write(b []byte) (int, error) {
@@ -39,85 +43,101 @@ func readBody(r io.ReadCloser) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// LoggingMiddleware использует *zap.SugaredLogger
-func LoggingMiddleware(logger *zap.SugaredLogger) func(http.Handler) http.Handler {
+func LoggingMiddleware(baseLogger *zap.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			rid := uuid.NewString()
 			start := time.Now()
 
-			// Читаем тело запроса
+			// Создаём логгер с базовыми полями
+			log := baseLogger.With(
+				zap.String("method", r.Method),
+				zap.String("uri", r.RequestURI),
+				zap.String("rid", rid),
+			)
+
+			// Добавляем логгер в контекст
+			ctx := contextkey.WithLogger(r.Context(), log)
+			r = r.WithContext(ctx)
+
 			var reqBody []byte
 			if r.Body != nil {
 				var err error
 				reqBody, err = readBody(r.Body)
 				if err != nil {
-					logger.Errorw("failed to read request body", "error", err, "uri", r.RequestURI)
+					log.Error("failed to read request body", zap.Error(err))
 				}
 				r.Body = io.NopCloser(bytes.NewBuffer(reqBody))
 			}
 
-			// Перехватываем ответ
 			bodyBuf := &bytes.Buffer{}
 			lw := &loggingResponseWriter{
 				ResponseWriter: w,
 				bodyBuf:        bodyBuf,
 				status:         0,
 				size:           0,
+				err:            nil,
 			}
+
+			defer func() {
+				// Берём логгер из контекста (он мог быть обогащён в ходе обработки)
+				log := contextkey.LoggerFromContext(ctx)
+
+				log = log.With(zap.String("duration", time.Since(start).String()))
+
+				if p := recover(); p != nil {
+					var msg string
+					switch v := p.(type) {
+					case string:
+						msg = v
+					case error:
+						msg = v.Error()
+					default:
+						msg = fmt.Sprintf("%v", v)
+					}
+
+					// 🔥 Подробное логирование при панике: body, headers
+					log = log.With(
+						zap.String("event", "panic"),
+						zap.String("msg", msg),
+						zap.Int("status", http.StatusInternalServerError),
+						zap.ByteString("request_body", reqBody),
+						zap.Any("request_headers", r.Header),
+						zap.ByteString("response_body", bodyBuf.Bytes()),
+					)
+					log.Error("Panic recovered")
+
+					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+					return
+				}
+
+				status := lw.status
+				if status == 0 {
+					status = 200
+				}
+				log = log.With(zap.Int("status", status))
+
+				// 🟢 Успешный запрос — только базовая информация
+				if status >= 200 && status < 400 {
+					log.Info("Successful request", zap.Int("size", lw.size))
+					return
+				}
+
+				// 🔴 Ошибка — логируем всё!
+				log = log.With(
+					zap.Int("size", lw.size),
+					zap.ByteString("request_body", reqBody),
+					zap.Any("request_headers", r.Header),
+					zap.ByteString("response_body", bodyBuf.Bytes()),
+				)
+				if lw.err != nil {
+					log.Error("Request failed", zap.Error(lw.err))
+				} else {
+					log.Warn("Client error", zap.Int("status", status))
+				}
+			}()
 
 			next.ServeHTTP(lw, r)
-
-			duration := time.Since(start)
-			isError := lw.status >= 400
-
-			// Базовые поля (всегда логируются)
-			args := []any{
-				"method", r.Method,
-				"uri", r.RequestURI,
-				"status", lw.status,
-				"duration", duration.String(),
-			}
-
-			// Дополнительные поля логируются только при ошибках
-			if isError {
-				// Сохраняем заголовки запроса
-				reqHeaders := make(map[string]string)
-				for k, v := range r.Header {
-					reqHeaders[k] = strings.Join(v, ", ")
-				}
-
-				// Заголовки ответа
-				resHeaders := make(map[string]string)
-				for k, v := range w.Header() {
-					resHeaders[k] = strings.Join(v, ", ")
-				}
-
-				// Добавляем подробные данные
-				args = append(args,
-					"query", r.URL.RawQuery,
-					"remote_addr", r.RemoteAddr,
-					"user_agent", r.UserAgent(),
-					"response_size", lw.size,
-					"req_body", truncateString(string(reqBody), 4096),
-					"res_body", truncateString(bodyBuf.String(), 4096),
-					"req_headers", reqHeaders,
-					"res_headers", resHeaders,
-				)
-			}
-
-			if isError {
-				logger.Errorw("HTTP request/response (error)", args...)
-			} else {
-				logger.Infow("HTTP request", args...)
-			}
 		})
 	}
-}
-
-// truncateString обрезает строку, если она слишком длинная
-func truncateString(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	return s[:max] + "...[truncated]"
 }

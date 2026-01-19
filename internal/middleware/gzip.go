@@ -13,12 +13,12 @@ type compressWriter struct {
 	w              http.ResponseWriter
 	zw             *gzip.Writer
 	supportsGzip   bool
-	logger         *zap.SugaredLogger
+	logger         *zap.Logger
 	shouldCompress bool
 	headerWritten  bool
 }
 
-func newCompressWriter(w http.ResponseWriter, supportsGzip bool, logger *zap.SugaredLogger) *compressWriter {
+func newCompressWriter(w http.ResponseWriter, supportsGzip bool, logger *zap.Logger) *compressWriter {
 	return &compressWriter{
 		w:              w,
 		zw:             gzip.NewWriter(w),

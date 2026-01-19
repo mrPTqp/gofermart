@@ -27,7 +27,7 @@ func ParseFlags() *Flags {
 	flag.StringVar(&accrualAddress, "r", "", "accrual system address")
 	flag.StringVar(&JWTSecret, "s", "", "JWT secret")
 	flag.DurationVar(&JWTTTL, "t", 0, "JWT TTL")
-	flag.DurationVar(&orderCheckInterval, "i", 10*time.Second, "interval for checking order status updates")
+	flag.DurationVar(&orderCheckInterval, "i", 0, "interval for checking order status updates")
 
 	flag.Parse()
 

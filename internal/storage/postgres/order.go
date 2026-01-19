@@ -16,11 +16,11 @@ import (
 
 type OrderStorage struct {
 	db     *sql.DB
-	logger *zap.SugaredLogger
+	logger *zap.Logger
 	mu     sync.Mutex
 }
 
-func NewOrderStorage(db *sql.DB, logger *zap.SugaredLogger) (*OrderStorage, error) {
+func NewOrderStorage(db *sql.DB, logger *zap.Logger) (*OrderStorage, error) {
 	return &OrderStorage{
 		db:     db,
 		logger: logger,

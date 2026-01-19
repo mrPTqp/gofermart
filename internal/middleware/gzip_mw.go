@@ -5,26 +5,24 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/mrPTqp/gofermart/internal/contextkey"
 	"go.uber.org/zap"
 )
 
-// GzipMiddleware возвращает chi-совместимое middleware, которое:
-// - сжимает ответ, если клиент поддерживает gzip и Content-Type разрешён
-// - распаковывает тело запроса, если оно прислано в gzip
-func GzipMiddleware(logger *zap.SugaredLogger) func(http.Handler) http.Handler {
+func GzipMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// === 1. Поддержка сжатия в ответе (gzip writer) ===
-			supportsGzip := strings.Contains(r.Header.Get("Accept-Encoding"), "gzip")
-			cw := newCompressWriter(w, supportsGzip, logger)
-			defer cw.Close() // гарантированно закроем writer
-			w = cw           // подменяем ResponseWriter
+			log := contextkey.LoggerFromContext(r.Context())
 
-			// === 2. Разжатие входящего тела, если оно сжато ===
+			supportsGzip := strings.Contains(r.Header.Get("Accept-Encoding"), "gzip")
+			cw := newCompressWriter(w, supportsGzip, log)
+			defer cw.Close()
+			w = cw
+
 			if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
 				cr, err := newCompressReader(r.Body)
 				if err != nil {
-					logger.Error("failed to create gzip reader", zap.Error(err))
+					log.Error("failed to create gzip reader", zap.Error(err))
 					http.Error(w, "invalid gzip data", http.StatusBadRequest)
 					return
 				}
@@ -32,7 +30,6 @@ func GzipMiddleware(logger *zap.SugaredLogger) func(http.Handler) http.Handler {
 				r.Body = cr
 			}
 
-			// === 3. Передаём управление следующему обработчику ===
 			next.ServeHTTP(w, r)
 		})
 	}

@@ -62,7 +62,7 @@ func LoadConfig() *Config {
 		JWTTTL = time.Duration(*flags.JWTTTL)
 	}
 
-	orderCheckInterval := 1 * time.Minute
+	orderCheckInterval := 10 * time.Second
 	if envs.OrderCheckInterval != nil && *envs.OrderCheckInterval != 0 {
 		orderCheckInterval = *envs.OrderCheckInterval
 	} else if flags.OrderCheckInterval != nil && *flags.OrderCheckInterval != 0 {

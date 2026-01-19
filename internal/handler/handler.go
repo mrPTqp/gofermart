@@ -36,7 +36,7 @@ type GofermartHandler struct {
 	OrderService   service.OrderService
 	AccountService service.AccountService
 	Config         *config.Config
-	Logger         *zap.SugaredLogger
+	Logger         *zap.Logger
 }
 
 func NewGofermartHandler(
@@ -44,7 +44,7 @@ func NewGofermartHandler(
 	orderService service.OrderService,
 	accountService service.AccountService,
 	config *config.Config,
-	logger *zap.SugaredLogger,
+	logger *zap.Logger,
 ) *GofermartHandler {
 	return &GofermartHandler{
 		UserService:    userService,
@@ -93,7 +93,7 @@ func (h *GofermartHandler) Register(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "user already exists", http.StatusConflict)
 			return
 		}
-		h.Logger.Errorf("register error: %v", err)
+		h.Logger.Error("register error", zap.Error(err))
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -157,7 +157,7 @@ func (h *GofermartHandler) UploadOrder(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "order belongs to another user", http.StatusConflict)
 			return
 		default:
-			h.Logger.Errorf("upload order error: %v", err)
+			h.Logger.Error("upload order error", zap.Error(err))
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
@@ -175,7 +175,8 @@ func (h *GofermartHandler) GetOrders(w http.ResponseWriter, r *http.Request) {
 
 	orders, err := h.OrderService.GetUserOrders(r.Context(), userID)
 	if err != nil {
-		h.Logger.Errorf("get orders error: %v", err)
+		h.Logger.Error("get orders error", zap.Error(err))
+
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -198,7 +199,8 @@ func (h *GofermartHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
 
 	balance, err := h.AccountService.GetBalance(r.Context(), userID)
 	if err != nil {
-		h.Logger.Errorf("get balance error: %v", err)
+		h.Logger.Error("get balance error", zap.Error(err))
+
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -237,7 +239,8 @@ func (h *GofermartHandler) WithdrawBalance(w http.ResponseWriter, r *http.Reques
 			http.Error(w, "insufficient funds", http.StatusPaymentRequired)
 			return
 		}
-		h.Logger.Errorf("withdraw error: %v", err)
+		h.Logger.Error("withdraw error", zap.Error(err))
+
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -254,7 +257,8 @@ func (h *GofermartHandler) GetWithdrawals(w http.ResponseWriter, r *http.Request
 
 	withdrawals, err := h.AccountService.GetWithdrawals(r.Context(), userID)
 	if err != nil {
-		h.Logger.Errorf("get withdrawals error: %v", err)
+		h.Logger.Error("get withdrawals error", zap.Error(err))
+
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
 
 	"github.com/mrPTqp/gofermart/internal/config"
@@ -15,26 +14,21 @@ import (
 	mw "github.com/mrPTqp/gofermart/internal/middleware"
 )
 
-// StartGofermartServer инициализирует маршруты, применяет middleware и запускает сервер
 func StartGofermartServer(
 	gh *handler.GofermartHandler,
 	cfg *config.Config,
-	logger *zap.SugaredLogger,
+	logger *zap.Logger,
 ) *http.Server {
 	r := chi.NewRouter()
 
-	// Общие middleware
 	r.Use(mw.LoggingMiddleware(logger))
-	r.Use(mw.GzipMiddleware(logger))
-	r.Use(middleware.Recoverer) // chi built-in panic recovery
+	r.Use(mw.GzipMiddleware())
 
-	// Публичные маршруты (без авторизации)
 	r.Post("/api/user/register", gh.Register)
 	r.Post("/api/user/login", gh.Login)
 
-	// Защищённые маршруты (требуют авторизации)
 	r.Group(func(r chi.Router) {
-		r.Use(mw.AuthMiddleware(logger, cfg.JWTSecret))
+		r.Use(mw.AuthMiddleware(cfg.JWTSecret))
 
 		r.Post("/api/user/orders", gh.UploadOrder)
 		r.Get("/api/user/orders", gh.GetOrders)
@@ -52,22 +46,22 @@ func StartGofermartServer(
 	}
 
 	go func() {
-		logger.Infof("Server is running on %s", cfg.Address.String())
+		logger.Info("Starting HTTP server", zap.String("address", cfg.Address.String()))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Fatalf("Server failed to start: %v", err)
+			logger.Fatal("HTTP server failed to start", zap.Error(err))
 		}
 	}()
 
 	return srv
 }
 
-// ShutdownGracefully корректно останавливает сервер
-func ShutdownGracefully(srv *http.Server, logger *zap.SugaredLogger) {
+func ShutdownGracefully(srv *http.Server, logger *zap.Logger) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		logger.Errorf("Server forced to shutdown: %v", err)
+		logger.Error("Server forced to shutdown",
+			zap.Error(err))
 	} else {
 		logger.Info("Server stopped gracefully")
 	}
