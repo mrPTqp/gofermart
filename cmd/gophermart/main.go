@@ -20,7 +20,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// tests
 // remove comments
 func main() {
 	logger := logger.NewLogger()

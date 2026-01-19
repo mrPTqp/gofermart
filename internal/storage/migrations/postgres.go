@@ -8,41 +8,41 @@ import (
 	"go.uber.org/zap"
 )
 
-func RunMigrations(dsn string, sugar *zap.Logger) error {
+func RunMigrations(dsn string, logger *zap.Logger) error {
 	m, err := migrate.New("file://migrations", dsn)
 	if err != nil {
-		sugar.Error("Failed to initialize migration tool", zap.Error(err))
+		logger.Error("Failed to initialize migration tool", zap.Error(err))
 		return err
 	}
 	defer m.Close()
 
 	current, _, _ := m.Version()
-	sugar.Info("Current database schema version", zap.Uint("version", current))
+	logger.Info("Current database schema version", zap.Uint("version", current))
 
 	if err := m.Up(); err != nil {
 		if err == migrate.ErrNoChange {
-			sugar.Info("No migrations to apply")
+			logger.Info("No migrations to apply")
 			return nil
 		}
 
-		sugar.Error("Migration failed, attempting rollback",
+		logger.Error("Migration failed, attempting rollback",
 			zap.Error(err))
 		if rollbackErr := m.Down(); rollbackErr != nil {
-			sugar.Error("Rollback after migration failure failed",
+			logger.Error("Rollback after migration failure failed",
 				zap.Error(rollbackErr))
 		} else {
-			sugar.Info("Rollback after migration failure succeeded")
+			logger.Info("Rollback after migration failure succeeded")
 		}
 		return err
 	}
 
 	newVersion, _, _ := m.Version()
 	if newVersion > current {
-		sugar.Info("Database schema migrated successfully",
+		logger.Info("Database schema migrated successfully",
 			zap.Uint("from", current),
 			zap.Uint("to", newVersion))
 	} else {
-		sugar.Info("Database schema is up to date")
+		logger.Info("Database schema is up to date")
 	}
 
 	return nil

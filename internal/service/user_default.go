@@ -33,6 +33,10 @@ func NewUserService(repo repository.UserRepository, jwtSecret string, ttl time.D
 }
 
 func (s *UserServiceDefault) Register(ctx context.Context, login, password string) (int64, string, error) {
+	if login == "" || password == "" {
+		return 0, "", errors.New("login and password required")
+	}
+
 	_, err := s.repo.FindByLogin(ctx, login)
 	if err == nil {
 		return 0, "", repository.ErrLoginExists
@@ -62,6 +66,7 @@ func (s *UserServiceDefault) Register(ctx context.Context, login, password strin
 
 	return user.ID, token, nil
 }
+
 
 func (s *UserServiceDefault) Login(ctx context.Context, login, password string) (int64, string, error) {
 	user, err := s.repo.FindByLogin(ctx, login)
