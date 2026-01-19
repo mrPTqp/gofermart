@@ -54,7 +54,7 @@ func LoadConfig() *Config {
 		JWTSecret = *flags.JWTSecret
 	}
 
-	var JWTTTL time.Duration = 24 * time.Hour
+	JWTTTL := 24 * time.Hour
 	if envs.JWTTTL != nil && *envs.JWTTTL != 0 {
 		JWTTTL = time.Duration(*envs.JWTTTL)
 	} else if flags.JWTTTL != nil && *flags.JWTTTL != 0 {

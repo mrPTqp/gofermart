@@ -19,7 +19,6 @@ import (
 	"github.com/mrPTqp/gofermart/internal/storage/postgres"
 )
 
-// inspect auth logic (move all logic to mw)
 // inspect logging logic
 // add debug logs
 // add readme (how are you processing balance? document it)

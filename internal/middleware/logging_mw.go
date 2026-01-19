@@ -1,4 +1,3 @@
-// middleware/logging.go
 package middleware
 
 import (
@@ -57,12 +56,6 @@ func LoggingMiddleware(logger *zap.SugaredLogger) func(http.Handler) http.Handle
 				r.Body = io.NopCloser(bytes.NewBuffer(reqBody))
 			}
 
-			// Сохраняем заголовки запроса
-			reqHeaders := make(map[string]string)
-			for k, v := range r.Header {
-				reqHeaders[k] = strings.Join(v, ", ")
-			}
-
 			// Перехватываем ответ
 			bodyBuf := &bytes.Buffer{}
 			lw := &loggingResponseWriter{
@@ -74,33 +67,49 @@ func LoggingMiddleware(logger *zap.SugaredLogger) func(http.Handler) http.Handle
 
 			next.ServeHTTP(lw, r)
 
-			// Заголовки ответа
-			resHeaders := make(map[string]string)
-			for k, v := range w.Header() {
-				resHeaders[k] = strings.Join(v, ", ")
-			}
-
 			duration := time.Since(start)
+			isError := lw.status >= 400
 
-			// Формируем аргументы для SugaredLogger (Infow требует пары: ключ-значение)
+			// Базовые поля (всегда логируются)
 			args := []any{
 				"method", r.Method,
 				"uri", r.RequestURI,
-				"query", r.URL.RawQuery,
-				"remote_addr", r.RemoteAddr,
-				"user_agent", r.UserAgent(),
 				"status", lw.status,
-				"response_size", lw.size,
 				"duration", duration.String(),
-
-				"req_body", truncateString(string(reqBody), 4096), // Ограничение для безопасности
-				"res_body", truncateString(bodyBuf.String(), 4096),
-
-				"req_headers", reqHeaders,
-				"res_headers", resHeaders,
 			}
 
-			logger.Infow("HTTP request/response", args...)
+			// Дополнительные поля логируются только при ошибках
+			if isError {
+				// Сохраняем заголовки запроса
+				reqHeaders := make(map[string]string)
+				for k, v := range r.Header {
+					reqHeaders[k] = strings.Join(v, ", ")
+				}
+
+				// Заголовки ответа
+				resHeaders := make(map[string]string)
+				for k, v := range w.Header() {
+					resHeaders[k] = strings.Join(v, ", ")
+				}
+
+				// Добавляем подробные данные
+				args = append(args,
+					"query", r.URL.RawQuery,
+					"remote_addr", r.RemoteAddr,
+					"user_agent", r.UserAgent(),
+					"response_size", lw.size,
+					"req_body", truncateString(string(reqBody), 4096),
+					"res_body", truncateString(bodyBuf.String(), 4096),
+					"req_headers", reqHeaders,
+					"res_headers", resHeaders,
+				)
+			}
+
+			if isError {
+				logger.Errorw("HTTP request/response (error)", args...)
+			} else {
+				logger.Infow("HTTP request", args...)
+			}
 		})
 	}
 }
