@@ -5,11 +5,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"math"
 	"sync"
 	"time"
 
 	"github.com/mrPTqp/gofermart/internal/model"
+	"github.com/mrPTqp/gofermart/internal/floatutils"
 	"github.com/mrPTqp/gofermart/internal/repository"
 	"go.uber.org/zap"
 )
@@ -102,7 +102,7 @@ func (s *OrderStorage) GetByUser(ctx context.Context, userID int64) ([]model.Ord
 		o.UploadedAt = o.CreatedAt
 
 		if accrual.Valid {
-			value := round(accrual.Float64, 2)
+			value := floatutils.Round(accrual.Float64, 2)
 			o.Accrual = &value
 		} else {
 			o.Accrual = nil // явно устанавливаем nil, если статус не PROCESSED или нет начислений
@@ -117,13 +117,6 @@ func (s *OrderStorage) GetByUser(ctx context.Context, userID int64) ([]model.Ord
 
 	return orders, nil
 }
-
-
-func round(val float64, precision int) float64 {
-	shift := math.Pow(10, float64(precision))
-	return math.Round(val*shift) / shift
-}
-
 
 func (s *OrderStorage) GetByNumber(ctx context.Context, number string) (*model.Order, error) {
 	var order model.Order
