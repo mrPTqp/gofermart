@@ -80,7 +80,7 @@ func main() {
 	}
 
 	go func() {
-		ticker := time.NewTicker(10 * time.Second)
+		ticker := time.NewTicker(cfg.OrderCheckInterval)
 		defer ticker.Stop()
 
 		for {

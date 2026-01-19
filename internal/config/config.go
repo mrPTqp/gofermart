@@ -7,11 +7,12 @@ import (
 )
 
 type Config struct {
-	Address        model.NetAddress
-	DatabaseDsn    *string
-	AccrualAddress model.NetAddress
-	JWTSecret      string
-	JWTTTL         time.Duration
+	Address            model.NetAddress
+	DatabaseDsn        *string
+	AccrualAddress     model.NetAddress
+	JWTSecret          string
+	JWTTTL             time.Duration
+	OrderCheckInterval time.Duration
 }
 
 func LoadConfig() *Config {
@@ -61,11 +62,19 @@ func LoadConfig() *Config {
 		JWTTTL = time.Duration(*flags.JWTTTL)
 	}
 
+	orderCheckInterval := 1 * time.Minute
+	if envs.OrderCheckInterval != nil && *envs.OrderCheckInterval != 0 {
+		orderCheckInterval = *envs.OrderCheckInterval
+	} else if flags.OrderCheckInterval != nil && *flags.OrderCheckInterval != 0 {
+		orderCheckInterval = *flags.OrderCheckInterval
+	}
+
 	return &Config{
-		Address:        na,
-		DatabaseDsn:    &databaseDsn,
-		AccrualAddress: ana,
-		JWTSecret:      JWTSecret,
-		JWTTTL:         JWTTTL,
+		Address:            na,
+		DatabaseDsn:        &databaseDsn,
+		AccrualAddress:     ana,
+		JWTSecret:          JWTSecret,
+		JWTTTL:             JWTTTL,
+		OrderCheckInterval: orderCheckInterval,
 	}
 }

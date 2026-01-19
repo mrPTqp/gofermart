@@ -6,11 +6,12 @@ import (
 )
 
 type Envs struct {
-	Address        *string
-	DatabaseDsn    *string
-	AccrualAddress *string
-	JWTSecret      *string
-	JWTTTL         *time.Duration
+	Address            *string
+	DatabaseDsn        *string
+	AccrualAddress     *string
+	JWTSecret          *string
+	JWTTTL             *time.Duration
+	OrderCheckInterval *time.Duration
 }
 
 func ParseEnvs() *Envs {
@@ -19,6 +20,8 @@ func ParseEnvs() *Envs {
 	var accrualAddress string
 	var JWTSecret string
 	var JWTTTL time.Duration
+	var orderCheckInterval time.Duration
+	var err error
 
 	if envAddr := os.Getenv("RUN_ADDRESS"); envAddr != "" {
 		address = envAddr
@@ -36,7 +39,6 @@ func ParseEnvs() *Envs {
 		JWTSecret = envJWTSecret
 	}
 
-	var err error
 	if envJWTTTL := os.Getenv("JWT_TTL"); envJWTTTL != "" {
 		JWTTTL, err = time.ParseDuration(envJWTTTL)
 		if err != nil {
@@ -44,11 +46,19 @@ func ParseEnvs() *Envs {
 		}
 	}
 
+	if envInterval := os.Getenv("ORDER_CHECK_INTERVAL"); envInterval != "" {
+		orderCheckInterval, err = time.ParseDuration(envInterval)
+		if err != nil {
+			panic("wrong ORDER_CHECK_INTERVAL duration: " + envInterval)
+		}
+	}
+
 	return &Envs{
-		Address:        &address,
-		DatabaseDsn:    &databaseDsn,
-		AccrualAddress: &accrualAddress,
-		JWTSecret:      &JWTSecret,
-		JWTTTL:         &JWTTTL,
+		Address:            &address,
+		DatabaseDsn:        &databaseDsn,
+		AccrualAddress:     &accrualAddress,
+		JWTSecret:          &JWTSecret,
+		JWTTTL:             &JWTTTL,
+		OrderCheckInterval: &orderCheckInterval,
 	}
 }
