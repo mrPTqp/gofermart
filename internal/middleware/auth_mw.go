@@ -1,4 +1,3 @@
-// internal/middleware/auth_mw.go
 package middleware
 
 import (
@@ -17,7 +16,7 @@ func AuthMiddleware(jwtSecret string) func(http.Handler) http.Handler {
 	secret := []byte(jwtSecret)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			log := contextkey.LoggerFromContext(r.Context()) // ⬅️ из контекста
+			log := contextkey.LoggerFromContext(r.Context())
 			log.Debug("auth middleware: started")
 
 			authHeader := r.Header.Get("Authorization")

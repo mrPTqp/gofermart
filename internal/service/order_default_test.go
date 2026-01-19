@@ -1,4 +1,3 @@
-// internal/service/order_default_test.go
 package service
 
 import (
@@ -32,7 +31,7 @@ func (m *mockOrderRepository) Create(ctx context.Context, number string, userID 
 		return m.err
 	}
 	if _, exists := m.orders[number]; exists {
-		return errors.New("already exists") // или конкретную ошибку, если нужно
+		return errors.New("already exists")
 	}
 	m.orders[number] = model.Order{Number: number, UserID: userID}
 	return nil
@@ -86,8 +85,6 @@ func (m *mockOrderRepository) UpdateStatus(ctx context.Context, number, status s
 	m.orders[number] = order
 	return nil
 }
-
-// === Тесты остаются без изменений ===
 
 func TestOrderService_UploadOrder(t *testing.T) {
 	tests := []struct {

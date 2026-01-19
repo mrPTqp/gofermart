@@ -1,4 +1,3 @@
-// internal/luhn/luhn_test.go
 package luhn
 
 import (

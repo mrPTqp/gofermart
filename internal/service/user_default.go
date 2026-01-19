@@ -1,4 +1,3 @@
-// internal/service/user.go
 package service
 
 import (

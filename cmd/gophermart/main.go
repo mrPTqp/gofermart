@@ -20,7 +20,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// remove comments
 func main() {
 	logger := logger.NewLogger()
 	defer logger.Sync()

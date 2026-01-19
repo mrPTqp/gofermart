@@ -1,4 +1,3 @@
-// internal/storage/postgres/account_storage_test.go
 package postgres
 
 import (

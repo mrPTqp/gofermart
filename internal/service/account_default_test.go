@@ -1,4 +1,3 @@
-// internal/service/account_default_test.go
 package service
 
 import (
@@ -10,7 +9,6 @@ import (
 	"github.com/mrPTqp/gofermart/internal/repository"
 )
 
-// Гарантируем, что мок реализует интерфейс
 var _ repository.AccountRepository = (*mockAccountRepository)(nil)
 
 type mockAccountRepository struct {
@@ -19,7 +17,7 @@ type mockAccountRepository struct {
 	withdrawErr   error
 	getErr        error
 	increaseErr   error
-	addAccrualErr error // ошибка для AddAccrual
+	addAccrualErr error
 }
 
 func (m *mockAccountRepository) GetCurrentBalance(ctx context.Context, userID int64) (*model.Balance, error) {
@@ -29,7 +27,6 @@ func (m *mockAccountRepository) GetCurrentBalance(ctx context.Context, userID in
 	return m.balance, nil
 }
 
-// Добавленный метод
 func (m *mockAccountRepository) AddAccrual(ctx context.Context, orderNumber string, userID int64, accrual float64) error {
 	return m.addAccrualErr
 }
@@ -48,8 +45,6 @@ func (m *mockAccountRepository) GetWithdrawals(ctx context.Context, userID int64
 func (m *mockAccountRepository) IncreaseBalance(ctx context.Context, userID int64, orderNumber string, amount float64) error {
 	return m.increaseErr
 }
-
-// === Тесты ниже остаются без изменений ===
 
 func TestAccountService_GetBalance(t *testing.T) {
 	tests := []struct {

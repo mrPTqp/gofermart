@@ -1,4 +1,3 @@
-// internal/storage/migrations/postgres.go
 package migrations
 
 import (

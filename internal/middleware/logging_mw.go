@@ -49,14 +49,12 @@ func LoggingMiddleware(baseLogger *zap.Logger) func(http.Handler) http.Handler {
 			rid := uuid.NewString()
 			start := time.Now()
 
-			// Создаём логгер с базовыми полями
 			log := baseLogger.With(
 				zap.String("method", r.Method),
 				zap.String("uri", r.RequestURI),
 				zap.String("rid", rid),
 			)
 
-			// Добавляем логгер в контекст
 			ctx := contextkey.WithLogger(r.Context(), log)
 			r = r.WithContext(ctx)
 
@@ -80,7 +78,6 @@ func LoggingMiddleware(baseLogger *zap.Logger) func(http.Handler) http.Handler {
 			}
 
 			defer func() {
-				// Берём логгер из контекста (он мог быть обогащён в ходе обработки)
 				log := contextkey.LoggerFromContext(ctx)
 
 				log = log.With(zap.String("duration", time.Since(start).String()))
@@ -96,7 +93,6 @@ func LoggingMiddleware(baseLogger *zap.Logger) func(http.Handler) http.Handler {
 						msg = fmt.Sprintf("%v", v)
 					}
 
-					// 🔥 Подробное логирование при панике: body, headers
 					log = log.With(
 						zap.String("event", "panic"),
 						zap.String("msg", msg),
@@ -117,13 +113,11 @@ func LoggingMiddleware(baseLogger *zap.Logger) func(http.Handler) http.Handler {
 				}
 				log = log.With(zap.Int("status", status))
 
-				// 🟢 Успешный запрос — только базовая информация
 				if status >= 200 && status < 400 {
 					log.Info("Successful request", zap.Int("size", lw.size))
 					return
 				}
 
-				// 🔴 Ошибка — логируем всё!
 				log = log.With(
 					zap.Int("size", lw.size),
 					zap.ByteString("request_body", reqBody),

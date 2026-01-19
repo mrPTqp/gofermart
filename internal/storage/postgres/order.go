@@ -1,4 +1,3 @@
-// internal/storage/postgres/order.go
 package postgres
 
 import (
@@ -105,7 +104,7 @@ func (s *OrderStorage) GetByUser(ctx context.Context, userID int64) ([]model.Ord
 			value := floatutils.Round(accrual.Float64, 2)
 			o.Accrual = &value
 		} else {
-			o.Accrual = nil // явно устанавливаем nil, если статус не PROCESSED или нет начислений
+			o.Accrual = nil
 		}
 
 		orders = append(orders, o)

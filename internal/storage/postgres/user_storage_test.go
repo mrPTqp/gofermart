@@ -1,4 +1,3 @@
-// internal/storage/postgres/user_storage_test.go
 package postgres
 
 import (
@@ -98,7 +97,6 @@ func TestUserStorage_Create(t *testing.T) {
 				}
 			}
 
-			// Проверяем, что все ожидания выполнены
 			if err := mock.ExpectationsWereMet(); err != nil {
 				t.Errorf("unfulfilled expectations: %v", err)
 			}
@@ -114,7 +112,7 @@ func TestUserStorage_FindByLogin(t *testing.T) {
 		name           string
 		login          string
 		mockSetup      func()
-		expectedUser   *string // указатель, чтобы отличать nil
+		expectedUser   *string
 		expectedError  error
 	}{
 		{
@@ -184,7 +182,6 @@ func TestUserStorage_FindByLogin(t *testing.T) {
 	}
 }
 
-// Вспомогательная функция
 func strPtr(s string) *string {
 	return &s
 }

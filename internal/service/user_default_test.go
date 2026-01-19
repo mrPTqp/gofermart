@@ -1,4 +1,3 @@
-// internal/service/user_default_test.go
 package service
 
 import (
@@ -33,7 +32,7 @@ func (m *mockUserRepository) Create(ctx context.Context, login, passwordHash str
 	if m.err != nil {
 		return m.err
 	}
-	// Убедитесь, что ID увеличивается
+
 	id := int64(len(m.users) + 1)
 	m.users[login] = model.User{
 		ID:             id,
@@ -140,7 +139,7 @@ func TestUserService_Login(t *testing.T) {
             password: "password123",
             mockUsers: map[string]model.User{
                 "user": {
-                    ID:           1, // ✅ Явно задан
+                    ID:           1,
                     Login:        "user",
                     PasswordHash: string(hash),
                 },
@@ -162,7 +161,6 @@ func TestUserService_Login(t *testing.T) {
             wantErr:   true,
             wantToken: false,
         },
-        // ... остальные тесты
     }
 
     for _, tt := range tests {

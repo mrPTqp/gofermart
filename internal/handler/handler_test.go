@@ -1,4 +1,3 @@
-// internal/handler/handler_test.go
 package handler
 
 import (
@@ -122,7 +121,7 @@ func TestRegister(t *testing.T) {
 			name:  "login already exists",
 			input: `{"login":"user1","password":"pass123"}`,
 			mockRegister: func(ctx context.Context, login, password string) (int64, string, error) {
-				return 0, "", repository.ErrLoginExists // ✅ Исправлено
+				return 0, "", repository.ErrLoginExists
 			},
 			expectedStatus: http.StatusConflict,
 		},
@@ -218,7 +217,7 @@ func TestUploadOrder(t *testing.T) {
 		{
 			name:   "successful upload",
 			token:  "valid",
-			body:   "4000001234567899", // ✅ Валидный по Luhn
+			body:   "4000001234567899",
 			mockUpload: func(ctx context.Context, userID int64, orderNum string) error {
 				return nil
 			},
@@ -265,7 +264,7 @@ func TestUploadOrder(t *testing.T) {
 
 			req := httptest.NewRequest(http.MethodPost, "/api/user/orders", strings.NewReader(tt.body))
 			if tt.token != "" {
-				req = withUserID(req, 1) // ✅ userID в контексте
+				req = withUserID(req, 1)
 			}
 			w := httptest.NewRecorder()
 
@@ -328,7 +327,7 @@ func TestGetOrders(t *testing.T) {
 
 			req := httptest.NewRequest(http.MethodGet, "/api/user/orders", nil)
 			if tt.token != "" {
-				req = withUserID(req, 1) // ✅
+				req = withUserID(req, 1)
 			}
 			w := httptest.NewRecorder()
 
@@ -387,7 +386,7 @@ func TestGetBalance(t *testing.T) {
 
 			req := httptest.NewRequest(http.MethodGet, "/api/user/balance", nil)
 			if tt.token != "" {
-				req = withUserID(req, 1) // ✅
+				req = withUserID(req, 1)
 			}
 			w := httptest.NewRecorder()
 
@@ -444,7 +443,7 @@ func TestWithdrawBalance(t *testing.T) {
 			token:  "valid",
 			input:  `{"order":"4000001234567899","sum":100.50}`,
 			mockWithdraw: func(ctx context.Context, userID int64, order string, sum float64) error {
-				return repository.ErrInsufficientFunds // ✅
+				return repository.ErrInsufficientFunds
 			},
 			expectedStatus: http.StatusPaymentRequired,
 		},
@@ -475,7 +474,7 @@ func TestWithdrawBalance(t *testing.T) {
 
 			req := httptest.NewRequest(http.MethodPost, "/api/user/balance/withdraw", strings.NewReader(tt.input))
 			if tt.token != "" {
-				req = withUserID(req, 1) // ✅
+				req = withUserID(req, 1)
 			}
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
@@ -537,7 +536,7 @@ func TestGetWithdrawals(t *testing.T) {
 
 			req := httptest.NewRequest(http.MethodGet, "/api/user/withdrawals", nil)
 			if tt.token != "" {
-				req = withUserID(req, 1) // ✅
+				req = withUserID(req, 1)
 			}
 			w := httptest.NewRecorder()
 

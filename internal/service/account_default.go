@@ -1,4 +1,3 @@
-// internal/service/account.go
 package service
 
 import (

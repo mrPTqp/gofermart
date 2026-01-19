@@ -1,4 +1,3 @@
-// internal/service/accrual.go
 package service
 
 import (

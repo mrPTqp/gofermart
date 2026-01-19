@@ -1,4 +1,3 @@
-// internal/service/accrual_default_test.go
 package service
 
 import (
@@ -24,7 +23,7 @@ func TestAccrualService_ProcessOrders(t *testing.T) {
 		repoErr         error
 		wantUpdated     map[string]model.OrderStatus
 		wantIncrease    bool
-		wantIncreaseErr error // ✅ Исправлено: было bool, стало error
+		wantIncreaseErr error
 	}{
 		{
 			name: "processed with accrual",
@@ -41,7 +40,7 @@ func TestAccrualService_ProcessOrders(t *testing.T) {
 			},
 			wantUpdated:     map[string]model.OrderStatus{"12345": model.OrderStatusProcessed},
 			wantIncrease:    true,
-			wantIncreaseErr: nil, // ✅ Явно nil
+			wantIncreaseErr: nil,
 		},
 		{
 			name: "invalid order",
@@ -103,7 +102,7 @@ func TestAccrualService_ProcessOrders(t *testing.T) {
 			},
 			wantUpdated:     map[string]model.OrderStatus{"33333": model.OrderStatusProcessed},
 			wantIncrease:    true,
-			wantIncreaseErr: errors.New("balance update failed"), // ✅ Ошибка при начислении
+			wantIncreaseErr: errors.New("balance update failed"),
 		},
 	}
 
@@ -119,14 +118,13 @@ func TestAccrualService_ProcessOrders(t *testing.T) {
 				mockRepo.err = tt.repoErr
 			}
 
-			// Заполняем заказы в репо
 			for _, order := range tt.orders {
 				mockRepo.orders[order.Number] = order
 			}
 
 			mockAccService := &AccountServiceDefault{
 				repo: &mockAccountRepository{
-					increaseErr: tt.wantIncreaseErr, // ✅ Теперь корректный тип
+					increaseErr: tt.wantIncreaseErr,
 				},
 			}
 
@@ -137,7 +135,6 @@ func TestAccrualService_ProcessOrders(t *testing.T) {
 
 			accrualSvc.ProcessOrders(context.Background())
 
-			// Проверяем статусы заказов
 			for num, wantStatus := range tt.wantUpdated {
 				updated, err := mockRepo.GetByNumber(context.Background(), num)
 				if err != nil {

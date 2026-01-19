@@ -1,4 +1,3 @@
-// internal/contextkey/contextkey.go
 package contextkey
 
 import (
