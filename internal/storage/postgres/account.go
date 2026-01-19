@@ -4,6 +4,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"sync"
 
 	"github.com/mrPTqp/gofermart/internal/model"
 	"github.com/mrPTqp/gofermart/internal/repository"
@@ -13,10 +14,15 @@ import (
 type AccountStorage struct {
 	db     *sql.DB
 	logger *zap.SugaredLogger
+	mu     sync.Mutex
 }
 
 func NewAccountStorage(db *sql.DB, logger *zap.SugaredLogger) (*AccountStorage, error) {
-	return &AccountStorage{db: db, logger: logger}, nil
+	return &AccountStorage{
+		db:     db,
+		logger: logger,
+		mu:     sync.Mutex{},
+	}, nil
 }
 
 func (s *AccountStorage) GetCurrentBalance(ctx context.Context, userID int64) (*model.Balance, error) {
@@ -59,6 +65,9 @@ func (s *AccountStorage) AddAccrual(ctx context.Context, orderNumber string, use
 }
 
 func (s *AccountStorage) Withdraw(ctx context.Context, userID int64, order string, sum float64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	cents := int64(sum * 100)
 
 	var availableCents int64

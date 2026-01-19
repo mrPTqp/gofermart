@@ -20,6 +20,17 @@ import (
 	"github.com/mrPTqp/gofermart/internal/storage/migrations"
 )
 
+//context propagation
+//move max logic to app.go
+//remove comments
+//inspect auth logic (move all logic to mw)
+//inspect logging logic
+//add debug logs
+//add readme (how are you processing balance? document it)
+//unite repositories and storage? or divede services interfaces and implementations
+//add secret config (for auth)
+//tests
+//round to utils
 func main() {
 	logger := logger.NewSugarLogger()
 
@@ -97,7 +108,7 @@ func main() {
         }
     }()
 
-	srv := app.StartGofermartServer(h, cfg, logger) //gorutine?
+	srv := app.StartGofermartServer(h, cfg, logger)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)

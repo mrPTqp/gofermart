@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"math"
+	"sync"
 	"time"
 
 	"github.com/mrPTqp/gofermart/internal/model"
@@ -16,13 +17,21 @@ import (
 type OrderStorage struct {
 	db     *sql.DB
 	logger *zap.SugaredLogger
+	mu     sync.Mutex
 }
 
 func NewOrderStorage(db *sql.DB, logger *zap.SugaredLogger) (*OrderStorage, error) {
-	return &OrderStorage{db: db, logger: logger}, nil
+	return &OrderStorage{
+		db:     db,
+		logger: logger,
+		mu:     sync.Mutex{},
+	}, nil
 }
 
 func (s *OrderStorage) Create(ctx context.Context, number string, userID int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	var existingUserID int64
 	err := s.db.QueryRowContext(ctx,
 		`SELECT user_id FROM public.t_order WHERE number = $1`,
@@ -43,6 +52,7 @@ func (s *OrderStorage) Create(ctx context.Context, number string, userID int64) 
 		number, userID)
 	return err
 }
+
 
 func (s *OrderStorage) GetByUser(ctx context.Context, userID int64) ([]model.Order, error) {
 	rows, err := s.db.QueryContext(ctx,
