@@ -38,7 +38,7 @@ func LoadConfig() *Config {
 	}
 
 	ana := model.NetAddress{}
-	accrualAddress := "localhost:8080"
+	accrualAddress := "localhost:8081"
 	if envs.AccrualAddress != nil && *envs.AccrualAddress != "" {
 		accrualAddress = *envs.AccrualAddress
 	} else if flags.AccrualAddress != nil && *flags.AccrualAddress != "" {
