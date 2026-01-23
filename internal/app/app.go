@@ -1,4 +1,3 @@
-// internal/app/app.go
 package app
 
 import (
@@ -21,7 +20,7 @@ type App struct {
 	logger   *zap.Logger
 	db       *sql.DB
 	ticker   *time.Ticker
-	cancel   context.CancelFunc // Для отмены фоновых задач
+	cancel   context.CancelFunc
 	shutdown sync.Once
 }
 
@@ -65,22 +64,18 @@ func NewApp(components *bootstrap.AppComponents) *App {
 func (a *App) Run() {
 	a.logger.Info("Starting HTTP server", zap.String("address", a.cfg.Config.Address.String()))
 
-	// Запуск HTTP-сервера
 	go func() {
 		if err := a.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			a.logger.Fatal("HTTP server failed to start", zap.Error(err))
 		}
 	}()
 
-	// Контекст для фоновых задач
 	ctx, cancel := context.WithCancel(context.Background())
 	a.cancel = cancel
 
-	// Запуск фонового процесса проверки заказов
 	go a.runBackgroundJobs(ctx)
 }
 
-// runBackgroundJobs — фоновая проверка статусов заказов через accrual-сервис
 func (a *App) runBackgroundJobs(ctx context.Context) {
 	a.logger.Info("Background order processing ticker started", zap.Duration("interval", a.cfg.Config.OrderCheckInterval))
 
@@ -96,21 +91,17 @@ func (a *App) runBackgroundJobs(ctx context.Context) {
 	}
 }
 
-// Shutdown — останавливает сервер, тикер и закрывает соединение с БД
 func (a *App) Shutdown(ctx context.Context) {
 	a.shutdown.Do(func() {
 		a.logger.Info("Shutting down application gracefully...")
 
-		// Отменяем контекст фоновых задач
 		if a.cancel != nil {
 			a.cancel()
 		}
 
-		// Останавливаем тикер
 		a.ticker.Stop()
 		a.logger.Debug("Ticker stopped")
 
-		// Останавливаем HTTP-сервер
 		if err := a.server.Shutdown(ctx); err != nil {
 			a.logger.Error("HTTP server shutdown error", zap.Error(err))
 		} else {

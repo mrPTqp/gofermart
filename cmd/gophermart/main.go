@@ -1,4 +1,3 @@
-// cmd/gophermart/main.go
 package main
 
 import (

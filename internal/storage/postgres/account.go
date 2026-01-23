@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"sync"
 
+	"github.com/mrPTqp/gofermart/internal/floatutils"
 	"github.com/mrPTqp/gofermart/internal/model"
 	"github.com/mrPTqp/gofermart/internal/repository"
 	"go.uber.org/zap"
@@ -53,9 +54,8 @@ func (s *AccountStorage) GetCurrentBalance(ctx context.Context, userID int64) (*
 	return balance, nil
 }
 
-
 func (s *AccountStorage) AddAccrual(ctx context.Context, orderNumber string, userID int64, accrual float64) error {
-	cents := int64(accrual * 100)
+	cents := int64(floatutils.Round(accrual, 2) * 100)
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO public.t_account (user_id, order_number, difference)
 		VALUES ($1, $2, $3)`,
@@ -67,7 +67,7 @@ func (s *AccountStorage) Withdraw(ctx context.Context, userID int64, order strin
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	cents := int64(sum * 100)
+	cents := int64(floatutils.Round(sum, 2) * 100)
 
 	var availableCents int64
 	err := s.db.QueryRowContext(ctx,
