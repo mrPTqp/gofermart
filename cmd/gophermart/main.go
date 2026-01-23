@@ -32,8 +32,8 @@ func main() {
 		zap.String("accrual_address", cfg.AccrualAddress.String()),
 		zap.Duration("order_check_interval", cfg.OrderCheckInterval),
 	)
-
-	ctx := context.Background()
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
 
 	var db *sql.DB
 	if cfg.DatabaseDsn != nil && *cfg.DatabaseDsn != "" {
@@ -80,6 +80,8 @@ func main() {
 		logger.Panic("Failed to create accrual service", zap.Error(err))
 	}
 
+	srv := app.StartGofermartServer(h, cfg, logger)
+
 	go func() {
 		ticker := time.NewTicker(cfg.OrderCheckInterval)
 		defer ticker.Stop()
@@ -87,14 +89,13 @@ func main() {
 		for {
 			select {
 			case <-ctx.Done():
+				logger.Info("Order processing ticker stopped due to shutdown")
 				return
 			case <-ticker.C:
-				accrualService.ProcessOrders(ctx)
+				accrualService.ProcessOrders(ctx) 
 			}
 		}
 	}()
-
-	srv := app.StartGofermartServer(h, cfg, logger)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
@@ -102,6 +103,7 @@ func main() {
 
 	logger.Info("Shutting down server gracefully...")
 	app.ShutdownGracefully(srv, logger)
+	cancel()
 
 	if db != nil {
 		logger.Info("Closing database connection...")

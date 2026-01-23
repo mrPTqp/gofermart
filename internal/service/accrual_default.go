@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
-	"github.com/mrPTqp/gofermart/internal/model"
 	"github.com/mrPTqp/gofermart/internal/floatutils"
+	"github.com/mrPTqp/gofermart/internal/model"
 	"github.com/mrPTqp/gofermart/internal/repository"
 	"go.uber.org/zap"
 )
@@ -31,7 +32,7 @@ type AccrualResponse struct {
 func NewAccrualService(
 	accrualSystemAddress string,
 	orderRepository repository.OrderRepository,
-	balanceService AccountService,
+	accountService AccountService,
 	logger *zap.Logger,
 ) (*AccrualServiceDefault, error) {
 	accrualURL, err := url.Parse(accrualSystemAddress)
@@ -43,37 +44,63 @@ func NewAccrualService(
 		client:           &http.Client{Timeout: 10 * time.Second},
 		accrualSystemURL: accrualURL,
 		orderRepository:  orderRepository,
-		accountService:   balanceService,
+		accountService:   accountService,
 		logger:           logger,
 	}, nil
 }
 
 func (s *AccrualServiceDefault) ProcessOrders(ctx context.Context) {
-	s.logger.Debug("Starting order processing cycle")
+	s.logger.Debug("Starting parallel order processing with streaming")
 
-	orders, err := s.orderRepository.GetOrdersForProcessing(ctx)
-	if err != nil {
-		s.logger.Error("Failed to get orders for processing", zap.Error(err))
-		return
-	}
+	const numWorkers = 10
+	jobs := make(chan model.Order, 100)
+	var wg sync.WaitGroup
 
-	s.logger.Debug("Fetched orders for processing",
-		zap.Int("count", len(orders)),
-		zap.Strings("order_numbers", func() []string {
-			var nums []string
-			for _, o := range orders {
-				nums = append(nums, o.Number)
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					s.logger.Debug("Worker shutting down", zap.Int("worker_id", workerID))
+					return
+				case order, ok := <-jobs:
+					if !ok {
+						return
+					}
+					if err := s.processOrder(ctx, order); err != nil {
+						s.logger.Error("Failed to process order",
+							zap.Int("worker_id", workerID),
+							zap.String("order_number", order.Number),
+							zap.Error(err))
+					}
+				}
 			}
-			return nums
-		}()),
-	)
-
-	for _, order := range orders {
-		s.logger.Debug("Processing order", zap.String("order_number", order.Number))
-		if err := s.processOrder(ctx, order); err != nil {
-			s.logger.Error("Failed to process order", zap.String("order_number", order.Number), zap.Error(err))
-		}
+		}(i)
 	}
+
+	go func() {
+		defer close(jobs)
+
+		err := s.orderRepository.StreamOrdersForProcessing(ctx, func(order model.Order) error {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case jobs <- order:
+				s.logger.Debug("Queued order for processing", zap.String("order_number", order.Number))
+				return nil
+			}
+		})
+
+		if err != nil {
+			s.logger.Error("Error streaming orders from database", zap.Error(err))
+		}
+	}()
+
+	wg.Wait()
+
+	s.logger.Debug("Parallel order processing completed")
 }
 
 func (s *AccrualServiceDefault) processOrder(ctx context.Context, order model.Order) error {
@@ -81,11 +108,9 @@ func (s *AccrualServiceDefault) processOrder(ctx context.Context, order model.Or
 		Path: fmt.Sprintf("/api/orders/%s", order.Number),
 	})
 
-	s.logger.Debug("Sending request to accrual system",
-		zap.String("method", "GET"),
+	s.logger.Debug("Querying accrual system",
 		zap.String("url", accrualURL.String()),
-		zap.String("order_number", order.Number),
-	)
+		zap.String("order_number", order.Number))
 
 	resp, err := s.client.Get(accrualURL.String())
 	if err != nil {
@@ -99,12 +124,6 @@ func (s *AccrualServiceDefault) processOrder(ctx context.Context, order model.Or
 		if err := json.NewDecoder(resp.Body).Decode(&accrualResp); err != nil {
 			return fmt.Errorf("failed to decode accrual response: %w", err)
 		}
-
-		s.logger.Debug("Received valid response from accrual system",
-			zap.String("order", accrualResp.Order),
-			zap.String("status", accrualResp.Status),
-			zap.Float64p("accrual", accrualResp.Accrual),
-		)
 
 		var newStatus model.OrderStatus
 		switch accrualResp.Status {
@@ -129,30 +148,25 @@ func (s *AccrualServiceDefault) processOrder(ctx context.Context, order model.Or
 
 		if accrualResp.Accrual != nil {
 			roundedAccrual := floatutils.Round(*accrualResp.Accrual, 2)
-			s.logger.Debug("Rounded accrual value",
-				zap.Float64("original", *accrualResp.Accrual),
-				zap.Float64("rounded", roundedAccrual))
 			updatedOrder.Accrual = &roundedAccrual
 		} else {
 			updatedOrder.Accrual = nil
 		}
 
 		if err := s.orderRepository.Update(ctx, &updatedOrder); err != nil {
-			return fmt.Errorf("failed to update order in DB: %w", err)
+			return fmt.Errorf("failed to update order: %w", err)
 		}
 
 		if updatedOrder.StatusCode == model.OrderStatusProcessed && updatedOrder.Accrual != nil {
-			s.logger.Info("Processing balance accrual for order",
-				zap.Int64("user_id", order.UserID),
+			s.logger.Info("Accrual confirmed, increasing balance",
 				zap.String("order_number", order.Number),
 				zap.Float64("accrual", *updatedOrder.Accrual),
-			)
+				zap.Int64("user_id", order.UserID))
 
 			if err := s.accountService.IncreaseBalance(ctx, order.UserID, order.Number, *updatedOrder.Accrual); err != nil {
-				s.logger.Error("Failed to increase user balance",
-					zap.Int64("user_id", order.UserID),
+				s.logger.Error("Failed to increase balance",
 					zap.String("order_number", order.Number),
-					zap.Float64("accrual", *updatedOrder.Accrual),
+					zap.Int64("user_id", order.UserID),
 					zap.Error(err))
 			}
 		}
@@ -163,10 +177,9 @@ func (s *AccrualServiceDefault) processOrder(ctx context.Context, order model.Or
 
 	case http.StatusTooManyRequests:
 		retryAfter := resp.Header.Get("Retry-After")
-		s.logger.Warn("Too many requests to accrual system",
+		s.logger.Warn("Too many requests",
 			zap.String("retry_after", retryAfter),
 			zap.String("order_number", order.Number))
-		return nil
 
 	case http.StatusInternalServerError:
 		s.logger.Warn("Internal server error from accrual system",
@@ -174,7 +187,7 @@ func (s *AccrualServiceDefault) processOrder(ctx context.Context, order model.Or
 			zap.String("order_number", order.Number))
 
 	default:
-		s.logger.Warn("Unexpected HTTP status from accrual system",
+		s.logger.Warn("Unexpected status from accrual system",
 			zap.Int("status_code", resp.StatusCode),
 			zap.String("order_number", order.Number))
 	}

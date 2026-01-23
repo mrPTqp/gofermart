@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/mrPTqp/gofermart/internal/model"
-	"github.com/mrPTqp/gofermart/internal/floatutils"
 	"github.com/mrPTqp/gofermart/internal/repository"
+	"github.com/mrPTqp/gofermart/internal/floatutils"
 	"go.uber.org/zap"
 )
 
@@ -51,7 +51,6 @@ func (s *OrderStorage) Create(ctx context.Context, number string, userID int64) 
 		number, userID)
 	return err
 }
-
 
 func (s *OrderStorage) GetByUser(ctx context.Context, userID int64) ([]model.Order, error) {
 	rows, err := s.db.QueryContext(ctx,
@@ -164,30 +163,24 @@ func (s *OrderStorage) UpdateStatus(ctx context.Context, number, status string) 
 	return err
 }
 
-func (s *OrderStorage) GetOrdersForProcessing(ctx context.Context) ([]model.Order, error) {
-	rows, err := s.db.QueryContext(ctx,		
+func (s *OrderStorage) StreamOrdersForProcessing(ctx context.Context, processor repository.OrderProcessor) error {
+	rows, err := s.db.QueryContext(ctx,
 		`SELECT 
-          o.number,
-          o.user_id,
-          o.created_at,
-          o.updated_at,
-          o.status_code,
-          o.last_checked_at
-        FROM 
-          public.t_order o
-        JOIN 
-          public.d_order_status s 
-        ON o.status_code = s.code
-        WHERE 
-          o.status_code in ('NEW', 'PROCESSING')
-		  ORDER BY created_at ASC`,
+            number,
+            user_id,
+            created_at,
+            updated_at,
+            status_code,
+            last_checked_at
+        FROM public.t_order
+        WHERE status_code IN ('NEW', 'PROCESSING')
+        ORDER BY created_at ASC`,
 	)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer rows.Close()
 
-	var orders []model.Order
 	for rows.Next() {
 		var order model.Order
 		var lastChecked sql.NullTime
@@ -201,17 +194,19 @@ func (s *OrderStorage) GetOrdersForProcessing(ctx context.Context) ([]model.Orde
 			&lastChecked,
 		)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		if lastChecked.Valid {
 			order.LastCheckedAt = lastChecked.Time
 		}
 
-		orders = append(orders, order)
+		if err := processor(order); err != nil {
+			return err 
+		}
 	}
 
-	return orders, rows.Err()
+	return rows.Err()
 }
 
 func (s *OrderStorage) Update(ctx context.Context, order *model.Order) error {

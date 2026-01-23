@@ -9,6 +9,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/mrPTqp/gofermart/internal/repository"
+	"github.com/mrPTqp/gofermart/internal/model"
 	"go.uber.org/zap/zaptest"
 )
 
@@ -363,52 +364,39 @@ func TestOrderStorage_UpdateStatus(t *testing.T) {
 	}
 }
 
-func TestOrderStorage_GetOrdersForProcessing(t *testing.T) {
+func TestOrderStorage_Update(t *testing.T) {
 	storage, mock := newOrderStorageWithMockDB(t)
 	defer mock.ExpectClose()
 
-	now := time.Now()
+	order := &model.Order{
+		Number:     "12345",
+		StatusCode: "PROCESSED",
+	}
 
 	tests := []struct {
 		name        string
+		order       *model.Order
 		mockSetup   func()
-		expectedLen int
 		expectedErr error
 	}{
 		{
-			name: "orders returned",
+			name:  "update success",
+			order: order,
 			mockSetup: func() {
-				rows := sqlmock.NewRows([]string{
-					"number", "user_id", "created_at", "updated_at", "status_code", "last_checked_at",
-				}).
-					AddRow("12345", int64(1), now, now, "NEW", now).
-					AddRow("12346", int64(2), now, now, "PROCESSING", now)
-
-				mock.ExpectQuery(`^SELECT o\.number, o\.user_id, o\.created_at, o\.updated_at, o\.status_code, o\.last_checked_at FROM public\.t_order o JOIN public\.d_order_status s ON o\.status_code = s\.code WHERE o\.status_code in \('NEW', 'PROCESSING'\) ORDER BY created_at ASC$`).
-					WillReturnRows(rows)
+				mock.ExpectExec(`^UPDATE public\.t_order SET status_code = \$1, last_checked_at = NOW\(\), updated_at = NOW\(\) WHERE number = \$2`).
+					WithArgs("PROCESSED", "12345").
+					WillReturnResult(sqlmock.NewResult(1, 1))
 			},
-			expectedLen: 2,
 			expectedErr: nil,
 		},
 		{
-			name: "no orders",
+			name:  "db error",
+			order: order,
 			mockSetup: func() {
-				rows := sqlmock.NewRows([]string{
-					"number", "user_id", "created_at", "updated_at", "status_code", "last_checked_at",
-				})
-				mock.ExpectQuery(`^SELECT o\.number, o\.user_id, o\.created_at, o\.updated_at, o\.status_code, o\.last_checked_at FROM public\.t_order o JOIN public\.d_order_status s ON o\.status_code = s\.code WHERE o\.status_code in \('NEW', 'PROCESSING'\) ORDER BY created_at ASC$`).
-					WillReturnRows(rows)
-			},
-			expectedLen: 0,
-			expectedErr: nil,
-		},
-		{
-			name: "db error",
-			mockSetup: func() {
-				mock.ExpectQuery(`^SELECT o\.number, o\.user_id, o\.created_at, o\.updated_at, o\.status_code, o\.last_checked_at FROM public\.t_order o JOIN public\.d_order_status s ON o\.status_code = s\.code WHERE o\.status_code in \('NEW', 'PROCESSING'\) ORDER BY created_at ASC$`).
+				mock.ExpectExec(`^UPDATE public\.t_order SET status_code = \$1, last_checked_at = NOW\(\), updated_at = NOW\(\) WHERE number = \$2`).
+					WithArgs("PROCESSED", "12345").
 					WillReturnError(errors.New("db error"))
 			},
-			expectedLen: 0,
 			expectedErr: errors.New("db error"),
 		},
 	}
@@ -417,21 +405,92 @@ func TestOrderStorage_GetOrdersForProcessing(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.mockSetup()
 
-			orders, err := storage.GetOrdersForProcessing(context.Background())
+			err := storage.Update(context.Background(), tt.order)
 
-			if tt.expectedErr != nil {
-				if err == nil || err.Error() != tt.expectedErr.Error() {
-					t.Errorf("expected error %v, got %v", tt.expectedErr, err)
-				}
-				if orders != nil {
-					t.Errorf("expected nil orders, got %d", len(orders))
-				}
-			} else {
+			if tt.expectedErr == nil {
 				if err != nil {
 					t.Errorf("expected no error, got %v", err)
 				}
-				if len(orders) != tt.expectedLen {
-					t.Errorf("expected %d orders, got %d", tt.expectedLen, len(orders))
+			} else {
+				if err == nil || err.Error() != tt.expectedErr.Error() {
+					t.Errorf("expected %v, got %v", tt.expectedErr, err)
+				}
+			}
+
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Errorf("unfulfilled expectations: %v", err)
+			}
+		})
+	}
+}
+
+func TestOrderStorage_StreamOrdersForProcessing(t *testing.T) {
+	storage, mock := newOrderStorageWithMockDB(t)
+	defer mock.ExpectClose()
+
+	now := time.Now()
+
+	tests := []struct {
+		name        string
+		mockSetup   func()
+		processor   repository.OrderProcessor
+		expectedErr error
+	}{
+		{
+			name: "orders processed successfully",
+			mockSetup: func() {
+				rows := sqlmock.NewRows([]string{
+					"number", "user_id", "created_at", "updated_at", "status_code", "last_checked_at",
+				}).AddRow("12345", int64(1), now, now, "NEW", now)
+				mock.ExpectQuery(`^SELECT number, user_id, created_at, updated_at, status_code, last_checked_at FROM public\.t_order WHERE status_code IN \('NEW', 'PROCESSING'\) ORDER BY created_at ASC`).
+					WillReturnRows(rows)
+			},
+			processor: func(order model.Order) error {
+				if order.Number != "12345" {
+					t.Errorf("expected number 12345, got %s", order.Number)
+				}
+				return nil
+			},
+			expectedErr: nil,
+		},
+		{
+			name: "processor returns error",
+			mockSetup: func() {
+				rows := sqlmock.NewRows([]string{
+					"number", "user_id", "created_at", "updated_at", "status_code", "last_checked_at",
+				}).AddRow("12345", int64(1), now, now, "NEW", now)
+				mock.ExpectQuery(`^SELECT number, user_id, created_at, updated_at, status_code, last_checked_at FROM public\.t_order WHERE status_code IN \('NEW', 'PROCESSING'\) ORDER BY created_at ASC`).
+					WillReturnRows(rows)
+			},
+			processor: func(order model.Order) error {
+				return errors.New("processing failed")
+			},
+			expectedErr: errors.New("processing failed"),
+		},
+		{
+			name: "db query error",
+			mockSetup: func() {
+				mock.ExpectQuery(`^SELECT number, user_id, created_at, updated_at, status_code, last_checked_at FROM public\.t_order WHERE status_code IN \('NEW', 'PROCESSING'\) ORDER BY created_at ASC`).
+					WillReturnError(errors.New("db error"))
+			},
+			processor:   func(order model.Order) error { return nil },
+			expectedErr: errors.New("db error"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.mockSetup()
+
+			err := storage.StreamOrdersForProcessing(context.Background(), tt.processor)
+
+			if tt.expectedErr == nil {
+				if err != nil {
+					t.Errorf("expected no error, got %v", err)
+				}
+			} else {
+				if err == nil || err.Error() != tt.expectedErr.Error() {
+					t.Errorf("expected %v, got %v", tt.expectedErr, err)
 				}
 			}
 

@@ -10,6 +10,7 @@ import (
 	"github.com/mrPTqp/gofermart/internal/repository"
 )
 
+// mockOrderRepository — мок для repository.OrderRepository
 type mockOrderRepository struct {
 	orders map[string]model.Order
 	err    error
@@ -50,17 +51,18 @@ func (m *mockOrderRepository) GetByUser(ctx context.Context, userID int64) ([]mo
 	return orders, nil
 }
 
-func (m *mockOrderRepository) GetOrdersForProcessing(ctx context.Context) ([]model.Order, error) {
+func (m *mockOrderRepository) StreamOrdersForProcessing(ctx context.Context, processor repository.OrderProcessor) error {
 	if m.err != nil {
-		return nil, m.err
+		return m.err
 	}
-	var orders []model.Order
 	for _, order := range m.orders {
 		if order.StatusCode == model.OrderStatusNew || order.StatusCode == model.OrderStatusProcessing {
-			orders = append(orders, order)
+			if err := processor(order); err != nil {
+				return err
+			}
 		}
 	}
-	return orders, nil
+	return nil
 }
 
 func (m *mockOrderRepository) Update(ctx context.Context, order *model.Order) error {
@@ -86,6 +88,8 @@ func (m *mockOrderRepository) UpdateStatus(ctx context.Context, number, status s
 	return nil
 }
 
+// === Тесты ===
+
 func TestOrderService_UploadOrder(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -104,27 +108,27 @@ func TestOrderService_UploadOrder(t *testing.T) {
 			wantErr:    false,
 		},
 		{
-			name:       "already uploaded by same user",
-			userID:     1,
-			orderNum:   "12345",
-			mockOrders: map[string]model.Order{"12345": {Number: "12345", UserID: 1}},
-			wantErr:    true,
+			name:          "already uploaded by same user",
+			userID:        1,
+			orderNum:      "12345",
+			mockOrders:    map[string]model.Order{"12345": {Number: "12345", UserID: 1}},
+			wantErr:       true,
 			wantErrString: "already uploaded",
 		},
 		{
-			name:       "uploaded by another user",
-			userID:     2,
-			orderNum:   "12345",
-			mockOrders: map[string]model.Order{"12345": {Number: "12345", UserID: 1}},
-			wantErr:    true,
+			name:          "uploaded by another user",
+			userID:        2,
+			orderNum:      "12345",
+			mockOrders:    map[string]model.Order{"12345": {Number: "12345", UserID: 1}},
+			wantErr:       true,
 			wantErrString: "another user",
 		},
 		{
-			name:       "repo error on get",
-			userID:     1,
-			orderNum:   "12345",
-			mockErr:    errors.New("db error"),
-			wantErr:    true,
+			name:     "repo error on get",
+			userID:   1,
+			orderNum: "12345",
+			mockErr:  errors.New("db error"),
+			wantErr:  true,
 		},
 	}
 
@@ -171,11 +175,11 @@ func TestOrderService_GetUserOrders(t *testing.T) {
 			wantLen:    0,
 		},
 		{
-			name:       "repo error",
-			userID:     1,
-			mockErr:    errors.New("db error"),
-			wantErr:    true,
-			wantLen:    0,
+			name:    "repo error",
+			userID:  1,
+			mockErr: errors.New("db error"),
+			wantErr: true,
+			wantLen: 0,
 		},
 	}
 
