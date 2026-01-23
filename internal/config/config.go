@@ -20,61 +20,42 @@ func LoadConfig() *Config {
 	flags := ParseFlags()
 
 	na := model.NetAddress{}
-	address := "localhost:8080"
-	if envs.Address != nil && *envs.Address != "" {
-		address = *envs.Address
-	} else if flags.Address != nil && *flags.Address != "" {
-		address = *flags.Address
-	}
+	address := pickValue(envs.Address, flags.Address, "localhost:8080")
 	if err := na.SetAddress(address); err != nil {
 		panic("invalid address: " + address + " error: " + err.Error())
 	}
 
-	var databaseDsn string
-	if envs.DatabaseDsn != nil && *envs.DatabaseDsn != "" {
-		databaseDsn = *envs.DatabaseDsn
-	} else if flags.DatabaseDsn != nil && *flags.DatabaseDsn != "" {
-		databaseDsn = *flags.DatabaseDsn
-	}
+	databaseDsn := pickValue(envs.DatabaseDsn, flags.DatabaseDsn, "")
 
 	ana := model.NetAddress{}
-	accrualAddress := "localhost:8081"
-	if envs.AccrualAddress != nil && *envs.AccrualAddress != "" {
-		accrualAddress = *envs.AccrualAddress
-	} else if flags.AccrualAddress != nil && *flags.AccrualAddress != "" {
-		accrualAddress = *flags.AccrualAddress
-	}
+	accrualAddress := pickValue(envs.AccrualAddress, flags.AccrualAddress, "localhost:8081")
 	if err := ana.SetAddress(accrualAddress); err != nil {
 		panic("invalid accrual address: " + accrualAddress + " error: " + err.Error())
 	}
 
-	JWTSecret := "superSecretKey"
-	if envs.JWTSecret != nil && *envs.JWTSecret != "" {
-		JWTSecret = *envs.JWTSecret
-	} else if flags.JWTSecret != nil && *flags.JWTSecret != "" {
-		JWTSecret = *flags.JWTSecret
-	}
+	jwtSecret := pickValue(envs.JWTSecret, flags.JWTSecret, "superSecretKey")
 
-	JWTTTL := 24 * time.Hour
-	if envs.JWTTTL != nil && *envs.JWTTTL != 0 {
-		JWTTTL = time.Duration(*envs.JWTTTL)
-	} else if flags.JWTTTL != nil && *flags.JWTTTL != 0 {
-		JWTTTL = time.Duration(*flags.JWTTTL)
-	}
+	jwtTTL := pickValue(envs.JWTTTL, flags.JWTTTL, 24*time.Hour)
 
-	orderCheckInterval := 10 * time.Second
-	if envs.OrderCheckInterval != nil && *envs.OrderCheckInterval != 0 {
-		orderCheckInterval = *envs.OrderCheckInterval
-	} else if flags.OrderCheckInterval != nil && *flags.OrderCheckInterval != 0 {
-		orderCheckInterval = *flags.OrderCheckInterval
-	}
+	orderCheckInterval := pickValue(envs.OrderCheckInterval, flags.OrderCheckInterval, 10*time.Second)
 
 	return &Config{
 		Address:            na,
 		DatabaseDsn:        &databaseDsn,
 		AccrualAddress:     ana,
-		JWTSecret:          JWTSecret,
-		JWTTTL:             JWTTTL,
+		JWTSecret:          jwtSecret,
+		JWTTTL:             jwtTTL,
 		OrderCheckInterval: orderCheckInterval,
 	}
+}
+
+func pickValue[T comparable](env, flag *T, def T) T {
+	var zero T
+	if env != nil && *env != zero {
+		return *env
+	}
+	if flag != nil && *flag != zero {
+		return *flag
+	}
+	return def
 }

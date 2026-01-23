@@ -15,6 +15,21 @@ import (
 	"go.uber.org/zap"
 )
 
+func decodeJSON[T any](r *http.Request) (*T, error) {
+	if r.Header.Get("Content-Type") != "application/json" {
+		return nil, errors.New("content-type must be application/json")
+	}
+	defer r.Body.Close()
+
+	var dst T
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&dst); err != nil {
+		return nil, err
+	}
+	return &dst, nil
+}
+
 type AccrualResponse struct {
 	Order   string   `json:"order"`
 	Status  string   `json:"status"`
@@ -62,22 +77,12 @@ func (h *GofermartHandler) getUID(r *http.Request) (int64, error) {
 	return uid, nil
 }
 
-func (h *GofermartHandler) decodeBody(r *http.Request, dst any) error {
-	defer r.Body.Close()
-	if r.Header.Get("Content-Type") != "application/json" {
-		return errors.New("content-type must be application/json")
-	}
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	return decoder.Decode(dst)
-}
-
 func (h *GofermartHandler) Register(w http.ResponseWriter, r *http.Request) {
-	var input struct {
+	input, err := decodeJSON[struct {
 		Login    string `json:"login"`
 		Password string `json:"password"`
-	}
-	if err := h.decodeBody(r, &input); err != nil {
+	}](r)
+	if err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
@@ -102,11 +107,11 @@ func (h *GofermartHandler) Register(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *GofermartHandler) Login(w http.ResponseWriter, r *http.Request) {
-	var input struct {
+	input, err := decodeJSON[struct {
 		Login    string `json:"login"`
 		Password string `json:"password"`
-	}
-	if err := h.decodeBody(r, &input); err != nil {
+	}](r)
+	if err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
@@ -175,7 +180,6 @@ func (h *GofermartHandler) GetOrders(w http.ResponseWriter, r *http.Request) {
 	orders, err := h.OrderService.GetUserOrders(r.Context(), userID)
 	if err != nil {
 		h.Logger.Error("get orders error", zap.Error(err))
-
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -199,7 +203,6 @@ func (h *GofermartHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
 	balance, err := h.AccountService.GetBalance(r.Context(), userID)
 	if err != nil {
 		h.Logger.Error("get balance error", zap.Error(err))
-
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -215,11 +218,11 @@ func (h *GofermartHandler) WithdrawBalance(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	var input struct {
+	input, err := decodeJSON[struct {
 		Order string  `json:"order"`
 		Sum   float64 `json:"sum"`
-	}
-	if err := h.decodeBody(r, &input); err != nil {
+	}](r)
+	if err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
@@ -239,7 +242,6 @@ func (h *GofermartHandler) WithdrawBalance(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		h.Logger.Error("withdraw error", zap.Error(err))
-
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -257,7 +259,6 @@ func (h *GofermartHandler) GetWithdrawals(w http.ResponseWriter, r *http.Request
 	withdrawals, err := h.AccountService.GetWithdrawals(r.Context(), userID)
 	if err != nil {
 		h.Logger.Error("get withdrawals error", zap.Error(err))
-
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
