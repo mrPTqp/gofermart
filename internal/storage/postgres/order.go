@@ -4,52 +4,46 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"sync"
 	"time"
 
+	"github.com/mrPTqp/gofermart/internal/floatutils"
 	"github.com/mrPTqp/gofermart/internal/model"
 	"github.com/mrPTqp/gofermart/internal/repository"
-	"github.com/mrPTqp/gofermart/internal/floatutils"
 	"go.uber.org/zap"
 )
 
 type OrderStorage struct {
 	db     *sql.DB
 	logger *zap.Logger
-	mu     sync.Mutex
 }
 
 func NewOrderStorage(db *sql.DB, logger *zap.Logger) (*OrderStorage, error) {
 	return &OrderStorage{
 		db:     db,
 		logger: logger,
-		mu:     sync.Mutex{},
 	}, nil
 }
 
 func (s *OrderStorage) Create(ctx context.Context, number string, userID int64) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	var insertedUserID int64
 
-	var existingUserID int64
 	err := s.db.QueryRowContext(ctx,
-		`SELECT user_id FROM public.t_order WHERE number = $1`,
-		number).Scan(&existingUserID)
+		`INSERT INTO public.t_order (number, user_id) 
+		VALUES ($1, $2)
+		ON CONFLICT (number) 
+		DO UPDATE SET user_id = public.t_order.user_id
+		RETURNING user_id`,
+		number, userID).Scan(&insertedUserID)
 
-	if err == nil && existingUserID != userID {
-		return repository.ErrOrderTaken
-	}
-	if err == nil && existingUserID == userID {
-		return repository.ErrOrderExists
-	}
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err != nil {
 		return err
 	}
 
-	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO public.t_order (number, user_id) VALUES ($1, $2)`,
-		number, userID)
-	return err
+	if insertedUserID != userID {
+		return repository.ErrOrderTaken
+	}
+
+	return nil
 }
 
 func (s *OrderStorage) GetByUser(ctx context.Context, userID int64) ([]model.Order, error) {
@@ -202,7 +196,7 @@ func (s *OrderStorage) StreamOrdersForProcessing(ctx context.Context, processor 
 		}
 
 		if err := processor(order); err != nil {
-			return err 
+			return err
 		}
 	}
 

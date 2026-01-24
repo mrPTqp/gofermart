@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"sync"
 
 	"github.com/mrPTqp/gofermart/internal/floatutils"
 	"github.com/mrPTqp/gofermart/internal/model"
@@ -14,14 +13,12 @@ import (
 type AccountStorage struct {
 	db     *sql.DB
 	logger *zap.Logger
-	mu     sync.Mutex
 }
 
 func NewAccountStorage(db *sql.DB, logger *zap.Logger) (*AccountStorage, error) {
 	return &AccountStorage{
 		db:     db,
 		logger: logger,
-		mu:     sync.Mutex{},
 	}, nil
 }
 
@@ -64,13 +61,16 @@ func (s *AccountStorage) AddAccrual(ctx context.Context, orderNumber string, use
 }
 
 func (s *AccountStorage) Withdraw(ctx context.Context, userID int64, order string, sum float64) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	cents := int64(floatutils.Round(sum, 2) * 100)
 
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
 	var availableCents int64
-	err := s.db.QueryRowContext(ctx,
+	err = tx.QueryRowContext(ctx,
 		`SELECT COALESCE(SUM(difference), 0)
 		FROM public.t_account
 		WHERE user_id = $1`,
@@ -83,11 +83,15 @@ func (s *AccountStorage) Withdraw(ctx context.Context, userID int64, order strin
 		return repository.ErrInsufficientFunds
 	}
 
-	_, err = s.db.ExecContext(ctx,
+	_, err = tx.ExecContext(ctx,
 		`INSERT INTO public.t_account (user_id, order_number, difference)
 		VALUES ($1, $2, $3)`,
 		userID, order, -cents)
-	return err
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 func (s *AccountStorage) GetWithdrawals(ctx context.Context, userID int64) ([]model.Withdrawal, error) {
