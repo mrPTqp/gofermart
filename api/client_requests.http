@@ -1,0 +1,89 @@
+### 1. Регистрация пользователя
+# @name register
+POST http://localhost:8080/api/user/register
+Content-Type: application/json
+
+{
+  "login": "john_doe",
+  "password": "secret123"
+}
+
+@authToken = {{register.response.headers.Authorization}}
+
+
+### 2. Аутентификация (если не делали регистрацию)
+# @name login
+POST http://localhost:8080/api/user/login
+Content-Type: application/json
+
+{
+  "login": "john_doe",
+  "password": "secret123"
+}
+
+@authToken = {{login.response.headers.Authorization}}
+
+
+### 3. Загрузка номера заказа
+POST http://localhost:8080/api/user/orders
+Content-Type: text/plain
+Authorization: {{authToken}}
+
+9278923470
+
+### 4. Получение списка заказов
+GET http://localhost:8080/api/user/orders
+Authorization: {{authToken}}
+
+### 5. Получение текущего баланса
+GET http://localhost:8080/api/user/balance
+Authorization: {{authToken}}
+
+### 6. Списание баллов
+POST http://localhost:8080/api/user/balance/withdraw
+Content-Type: application/json
+Authorization: {{authToken}}
+
+{
+  "order": "2377225624",
+  "sum": 751
+}
+
+### 7. Получение истории списаний
+GET http://localhost:8080/api/user/withdrawals
+Authorization: {{authToken}}
+
+
+
+
+
+##################################Accrual################################
+### 1. Регистрация нового совершённого заказа
+POST http://localhost:8081/api/orders HTTP/1.1
+Content-Type: application/json
+
+{
+    "order": "9278923470",
+    "goods": [
+        {
+            "description": "Чайник Bork",
+            "price": 7000
+        }
+    ]
+} 
+
+### 2. Регистрация информации о вознаграждении за товар
+POST http://localhost:8081/api/goods HTTP/1.1
+Content-Type: application/json
+
+{
+    "match": "Bork",
+    "reward": 100,
+    "reward_type": "pt"
+}
+
+### 3. Получение информации о расчёте начислений
+GET http://localhost:8081/api/orders/9278923470 HTTP/1.1
+Content-Length: 0 
+
+### Еще валидный номер заказа 4444555566661111
