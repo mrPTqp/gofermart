@@ -13,6 +13,7 @@ import (
 	"github.com/mrPTqp/gofermart/internal/model"
 	"github.com/mrPTqp/gofermart/internal/repository"
 	"go.uber.org/zap"
+	"golang.org/x/sync/semaphore"
 )
 
 type AccrualServiceDefault struct {
@@ -50,57 +51,41 @@ func NewAccrualService(
 }
 
 func (s *AccrualServiceDefault) ProcessOrders(ctx context.Context) {
-	s.logger.Debug("Starting parallel order processing with streaming")
+	s.logger.Debug("Starting order processing with semaphore")
 
-	const numWorkers = 10
-	jobs := make(chan model.Order, 100)
+	const maxConcurrency = 10
+	sem := semaphore.NewWeighted(int64(maxConcurrency))
+
 	var wg sync.WaitGroup
 
-	for i := 0; i < numWorkers; i++ {
-		wg.Add(1)
-		go func(workerID int) {
-			defer wg.Done()
-			for {
-				select {
-				case <-ctx.Done():
-					s.logger.Debug("Worker shutting down", zap.Int("worker_id", workerID))
-					return
-				case order, ok := <-jobs:
-					if !ok {
-						return
-					}
-					if err := s.processOrder(ctx, order); err != nil {
-						s.logger.Error("Failed to process order",
-							zap.Int("worker_id", workerID),
-							zap.String("order_number", order.Number),
-							zap.Error(err))
-					}
-				}
-			}
-		}(i)
-	}
-
-	go func() {
-		defer close(jobs)
-
-		err := s.orderRepository.StreamOrdersForProcessing(ctx, func(order model.Order) error {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case jobs <- order:
-				s.logger.Debug("Queued order for processing", zap.String("order_number", order.Number))
-				return nil
-			}
-		})
-
-		if err != nil {
-			s.logger.Error("Error streaming orders from database", zap.Error(err))
+	err := s.orderRepository.StreamOrdersForProcessing(ctx, func(order model.Order) error {
+		if err := sem.Acquire(ctx, 1); err != nil {
+			s.logger.Debug("Context cancelled while acquiring semaphore", zap.Error(err))
+			return err
 		}
-	}()
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer sem.Release(1)
+
+			if err := s.processOrder(ctx, order); err != nil {
+				s.logger.Error("Failed to process order",
+					zap.String("order_number", order.Number),
+					zap.Error(err))
+			}
+		}()
+
+		return nil
+	})
+
+	if err != nil {
+		s.logger.Error("Error streaming orders from database", zap.Error(err))
+	}
 
 	wg.Wait()
 
-	s.logger.Debug("Parallel order processing completed")
+	s.logger.Debug("Order processing completed")
 }
 
 func (s *AccrualServiceDefault) processOrder(ctx context.Context, order model.Order) error {

@@ -26,10 +26,10 @@ func (s *OrderServiceDefault) UploadOrder(ctx context.Context, userID int64, ord
 	}
 
 	if existingOrder.UserID == userID {
-		return errors.New("already uploaded")
+		return repository.ErrOrderExists
 	}
 
-	return errors.New("another user")
+	return repository.ErrAnotherUser
 }
 
 func (s *OrderServiceDefault) GetUserOrders(ctx context.Context, userID int64) ([]model.Order, error) {

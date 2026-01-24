@@ -1,4 +1,3 @@
-// internal/bootstrap/bootstrapper.go
 package bootstrap
 
 import (

@@ -152,22 +152,21 @@ func (h *GofermartHandler) UploadOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = h.OrderService.UploadOrder(r.Context(), userID, orderNum)
-	if err != nil {
-		switch err.Error() {
-		case "already uploaded":
-			w.WriteHeader(http.StatusOK)
-			return
-		case "another user":
-			http.Error(w, "order belongs to another user", http.StatusConflict)
-			return
-		default:
-			h.Logger.Error("upload order error", zap.Error(err))
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
+	switch {
+	case err == nil:
+		w.WriteHeader(http.StatusAccepted)
+		return
+	case errors.Is(err, repository.ErrOrderExists):
+		w.WriteHeader(http.StatusOK)
+		return
+	case errors.Is(err, repository.ErrAnotherUser):
+		http.Error(w, "order belongs to another user", http.StatusConflict)
+		return
+	default:
+		h.Logger.Error("upload order error", zap.Error(err))
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
 	}
-
-	w.WriteHeader(http.StatusAccepted)
 }
 
 func (h *GofermartHandler) GetOrders(w http.ResponseWriter, r *http.Request) {

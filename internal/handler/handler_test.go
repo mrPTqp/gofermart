@@ -46,10 +46,10 @@ func (m *MockOrderService) GetUserOrders(ctx context.Context, userID int64) ([]m
 }
 
 type MockAccountService struct {
-	GetBalanceFunc       func(ctx context.Context, userID int64) (model.Balance, error)
-	WithdrawFunc         func(ctx context.Context, userID int64, order string, sum float64) error
-	GetWithdrawalsFunc   func(ctx context.Context, userID int64) ([]model.Withdrawal, error)
-	IncreaseBalanceFunc  func(ctx context.Context, userID int64, orderNumber string, amount float64) error
+	GetBalanceFunc      func(ctx context.Context, userID int64) (model.Balance, error)
+	WithdrawFunc        func(ctx context.Context, userID int64, order string, sum float64) error
+	GetWithdrawalsFunc  func(ctx context.Context, userID int64) ([]model.Withdrawal, error)
+	IncreaseBalanceFunc func(ctx context.Context, userID int64, orderNumber string, amount float64) error
 }
 
 func (m *MockAccountService) GetBalance(ctx context.Context, userID int64) (model.Balance, error) {
@@ -213,11 +213,12 @@ func TestUploadOrder(t *testing.T) {
 		body           string
 		mockUpload     func(ctx context.Context, userID int64, orderNum string) error
 		expectedStatus int
+		expectedBody   string
 	}{
 		{
-			name:   "successful upload",
-			token:  "valid",
-			body:   "4000001234567899",
+			name:  "successful upload",
+			token: "valid",
+			body:  "4000001234567899",
 			mockUpload: func(ctx context.Context, userID int64, orderNum string) error {
 				return nil
 			},
@@ -231,28 +232,47 @@ func TestUploadOrder(t *testing.T) {
 			expectedStatus: http.StatusUnauthorized,
 		},
 		{
-			name:   "already uploaded",
-			token:  "valid",
-			body:   "4000001234567899",
+			name:  "already uploaded by same user",
+			token: "valid",
+			body:  "4000001234567899",
 			mockUpload: func(ctx context.Context, userID int64, orderNum string) error {
-				return errors.New("already uploaded")
+				return repository.ErrOrderExists
 			},
 			expectedStatus: http.StatusOK,
 		},
 		{
-			name:   "belongs to another user",
-			token:  "valid",
-			body:   "4000001234567899",
+			name:  "belongs to another user",
+			token: "valid",
+			body:  "4000001234567899",
 			mockUpload: func(ctx context.Context, userID int64, orderNum string) error {
-				return errors.New("another user")
+				return repository.ErrAnotherUser
 			},
 			expectedStatus: http.StatusConflict,
+			expectedBody:   "order belongs to another user",
 		},
 		{
 			name:           "empty body",
 			token:          "valid",
 			body:           "",
 			mockUpload:     func(ctx context.Context, userID int64, orderNum string) error { return nil },
+			expectedStatus: http.StatusBadRequest,
+			expectedBody:   "empty order number",
+		},
+		{
+			name:           "invalid luhn",
+			token:          "valid",
+			body:           "1234567890123456",
+			mockUpload:     func(ctx context.Context, userID int64, orderNum string) error { return nil },
+			expectedStatus: http.StatusUnprocessableEntity,
+			expectedBody:   "invalid order number (Luhn)",
+		},
+		{
+			name:  "malformed body read error",
+			token: "valid",
+			body:  "",
+			mockUpload: func(ctx context.Context, userID int64, orderNum string) error {
+				return nil
+			},
 			expectedStatus: http.StatusBadRequest,
 		},
 	}
@@ -262,7 +282,12 @@ func TestUploadOrder(t *testing.T) {
 			mockOrderSvc := &MockOrderService{UploadOrderFunc: tt.mockUpload}
 			handler := createTestHandler(nil, mockOrderSvc, nil, t)
 
-			req := httptest.NewRequest(http.MethodPost, "/api/user/orders", strings.NewReader(tt.body))
+			var reader io.Reader = strings.NewReader(tt.body)
+			if tt.name == "malformed body read error" {
+				reader = &errorReader{}
+			}
+
+			req := httptest.NewRequest(http.MethodPost, "/api/user/orders", reader)
 			if tt.token != "" {
 				req = withUserID(req, 1)
 			}
@@ -273,8 +298,21 @@ func TestUploadOrder(t *testing.T) {
 			if w.Code != tt.expectedStatus {
 				t.Errorf("expected status %d, got %d", tt.expectedStatus, w.Code)
 			}
+
+			if tt.expectedBody != "" {
+				body := w.Body.String()
+				if !strings.Contains(body, tt.expectedBody) {
+					t.Errorf("expected response body to contain %q, got %q", tt.expectedBody, body)
+				}
+			}
 		})
 	}
+}
+
+type errorReader struct{}
+
+func (e *errorReader) Read(p []byte) (n int, err error) {
+	return 0, errors.New("read error")
 }
 
 func TestGetOrders(t *testing.T) {
@@ -414,9 +452,9 @@ func TestWithdrawBalance(t *testing.T) {
 		expectedStatus int
 	}{
 		{
-			name:   "valid withdrawal",
-			token:  "valid",
-			input:  `{"order":"4000001234567899","sum":100.50}`,
+			name:  "valid withdrawal",
+			token: "valid",
+			input: `{"order":"4000001234567899","sum":100.50}`,
 			mockWithdraw: func(ctx context.Context, userID int64, order string, sum float64) error {
 				return nil
 			},
@@ -430,36 +468,36 @@ func TestWithdrawBalance(t *testing.T) {
 			expectedStatus: http.StatusUnauthorized,
 		},
 		{
-			name:   "invalid order number",
-			token:  "valid",
-			input:  `{"order":"12345678902","sum":100.50}`,
+			name:  "invalid order number",
+			token: "valid",
+			input: `{"order":"12345678902","sum":100.50}`,
 			mockWithdraw: func(ctx context.Context, userID int64, order string, sum float64) error {
 				return nil
 			},
 			expectedStatus: http.StatusUnprocessableEntity,
 		},
 		{
-			name:   "insufficient funds",
-			token:  "valid",
-			input:  `{"order":"4000001234567899","sum":100.50}`,
+			name:  "insufficient funds",
+			token: "valid",
+			input: `{"order":"4000001234567899","sum":100.50}`,
 			mockWithdraw: func(ctx context.Context, userID int64, order string, sum float64) error {
 				return repository.ErrInsufficientFunds
 			},
 			expectedStatus: http.StatusPaymentRequired,
 		},
 		{
-			name:   "invalid sum",
-			token:  "valid",
-			input:  `{"order":"4000001234567899","sum":0}`,
+			name:  "invalid sum",
+			token: "valid",
+			input: `{"order":"4000001234567899","sum":0}`,
 			mockWithdraw: func(ctx context.Context, userID int64, order string, sum float64) error {
 				return errors.New("withdrawal amount must be positive")
 			},
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
-			name:   "invalid json",
-			token:  "valid",
-			input:  `{"order":}`,
+			name:  "invalid json",
+			token: "valid",
+			input: `{"order":}`,
 			mockWithdraw: func(ctx context.Context, userID int64, order string, sum float64) error {
 				return nil
 			},
@@ -490,11 +528,11 @@ func TestWithdrawBalance(t *testing.T) {
 
 func TestGetWithdrawals(t *testing.T) {
 	tests := []struct {
-		name             string
-		token            string
+		name               string
+		token              string
 		mockGetWithdrawals func(ctx context.Context, userID int64) ([]model.Withdrawal, error)
-		expectedStatus   int
-		expectBody       bool
+		expectedStatus     int
+		expectBody         bool
 	}{
 		{
 			name:  "withdrawals found",
@@ -508,16 +546,16 @@ func TestGetWithdrawals(t *testing.T) {
 			expectBody:     true,
 		},
 		{
-			name:             "no withdrawals",
-			token:            "valid",
+			name:               "no withdrawals",
+			token:              "valid",
 			mockGetWithdrawals: func(ctx context.Context, userID int64) ([]model.Withdrawal, error) { return nil, nil },
-			expectedStatus:   http.StatusNoContent,
+			expectedStatus:     http.StatusNoContent,
 		},
 		{
-			name:             "unauthorized",
-			token:            "",
+			name:               "unauthorized",
+			token:              "",
 			mockGetWithdrawals: func(ctx context.Context, userID int64) ([]model.Withdrawal, error) { return nil, nil },
-			expectedStatus:   http.StatusUnauthorized,
+			expectedStatus:     http.StatusUnauthorized,
 		},
 		{
 			name:  "repo error",

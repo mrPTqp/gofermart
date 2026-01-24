@@ -10,7 +10,6 @@ import (
 	"github.com/mrPTqp/gofermart/internal/repository"
 )
 
-// mockOrderRepository — мок для repository.OrderRepository
 type mockOrderRepository struct {
 	orders map[string]model.Order
 	err    error
@@ -31,10 +30,18 @@ func (m *mockOrderRepository) Create(ctx context.Context, number string, userID 
 	if m.err != nil {
 		return m.err
 	}
-	if _, exists := m.orders[number]; exists {
-		return errors.New("already exists")
+	if existing, exists := m.orders[number]; exists {
+		if existing.UserID == userID {
+			return repository.ErrOrderExists
+		}
+		return repository.ErrAnotherUser
 	}
-	m.orders[number] = model.Order{Number: number, UserID: userID}
+	m.orders[number] = model.Order{
+		Number:     number,
+		UserID:     userID,
+		StatusCode: model.OrderStatusNew,
+		UploadedAt: time.Now(),
+	}
 	return nil
 }
 
@@ -88,17 +95,15 @@ func (m *mockOrderRepository) UpdateStatus(ctx context.Context, number, status s
 	return nil
 }
 
-// === Тесты ===
-
 func TestOrderService_UploadOrder(t *testing.T) {
 	tests := []struct {
-		name          string
-		userID        int64
-		orderNum      string
-		mockOrders    map[string]model.Order
-		mockErr       error
-		wantErr       bool
-		wantErrString string
+		name       string
+		userID     int64
+		orderNum   string
+		mockOrders map[string]model.Order
+		mockErr    error
+		wantErr    bool
+		wantErrIs  error
 	}{
 		{
 			name:       "new order success",
@@ -108,20 +113,20 @@ func TestOrderService_UploadOrder(t *testing.T) {
 			wantErr:    false,
 		},
 		{
-			name:          "already uploaded by same user",
-			userID:        1,
-			orderNum:      "12345",
-			mockOrders:    map[string]model.Order{"12345": {Number: "12345", UserID: 1}},
-			wantErr:       true,
-			wantErrString: "already uploaded",
+			name:       "already uploaded by same user",
+			userID:     1,
+			orderNum:   "12345",
+			mockOrders: map[string]model.Order{"12345": {Number: "12345", UserID: 1}},
+			wantErr:    true,
+			wantErrIs:  repository.ErrOrderExists,
 		},
 		{
-			name:          "uploaded by another user",
-			userID:        2,
-			orderNum:      "12345",
-			mockOrders:    map[string]model.Order{"12345": {Number: "12345", UserID: 1}},
-			wantErr:       true,
-			wantErrString: "another user",
+			name:       "uploaded by another user",
+			userID:     2,
+			orderNum:   "12345",
+			mockOrders: map[string]model.Order{"12345": {Number: "12345", UserID: 1}},
+			wantErr:    true,
+			wantErrIs:  repository.ErrAnotherUser,
 		},
 		{
 			name:     "repo error on get",
@@ -142,9 +147,9 @@ func TestOrderService_UploadOrder(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("UploadOrder() error = %v, wantErr = %v", err, tt.wantErr)
 			}
-			if tt.wantErr && tt.wantErrString != "" {
-				if err.Error() != tt.wantErrString {
-					t.Errorf("Expected error %q, got %q", tt.wantErrString, err.Error())
+			if tt.wantErrIs != nil {
+				if !errors.Is(err, tt.wantErrIs) {
+					t.Errorf("Expected error %v, got %v", tt.wantErrIs, err)
 				}
 			}
 		})
@@ -168,7 +173,7 @@ func TestOrderService_GetUserOrders(t *testing.T) {
 			wantLen:    2,
 		},
 		{
-			name:       "no orders",
+			name:       "no orders for user",
 			userID:     2,
 			mockOrders: map[string]model.Order{"123": {UserID: 1}},
 			wantErr:    false,
